@@ -4,6 +4,7 @@ import { Page } from './lib/constants';
 import { AddCardPage } from './pages/AddCardPage';
 import { AddToCartPage } from './pages/AddToCartPage';
 import { CartPage } from './pages/CartPage';
+import { ForSalePage } from './pages/ForSalePage';
 import { InventoryPage } from './pages/InventoryPage';
 import { StatsPage } from './pages/StatsPage';
 import { TradesPage } from './pages/TradesPage';
@@ -114,6 +115,13 @@ export default function App() {
       <main className="min-w-0 flex-1 overflow-hidden">
         {page === 'inventory' && (
           <InventoryPage
+            cardSets={cardSets}
+            refreshKey={refreshKey}
+            onChanged={bump}
+          />
+        )}
+        {page === 'forSale' && (
+          <ForSalePage
             cardSets={cardSets}
             refreshKey={refreshKey}
             onChanged={bump}

@@ -30,7 +30,6 @@ const CLASS_OPTIONS = [
   'Swordcraft',
   'Runecraft',
   'Dragoncraft',
-  'Shadowcraft',
   'Abysscraft',
   'Havencraft',
 ];

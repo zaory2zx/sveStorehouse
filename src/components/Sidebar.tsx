@@ -6,6 +6,7 @@ import {
   ScrollText,
   ShoppingBag,
   ShoppingCart,
+  Tag,
 } from 'lucide-react';
 import { Page } from '../lib/constants';
 
@@ -19,6 +20,7 @@ interface SidebarProps {
 
 const NAV: { id: Page; label: string; icon: typeof Package }[] = [
   { id: 'inventory', label: '我的库存', icon: Package },
+  { id: 'forSale', label: '待售', icon: Tag },
   { id: 'add', label: '添加卡牌', icon: PlusCircle },
   { id: 'cart', label: '购物车', icon: ShoppingCart },
   { id: 'addCart', label: '加入购物车', icon: ShoppingBag },

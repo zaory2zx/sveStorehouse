@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardImage } from '../components/CardImage';
 import { CraftIcon } from '../components/CraftIcon';
 import { emptyFilters, FilterBar, FilterValues } from '../components/FilterBar';
 import { Modal } from '../components/Modal';
+import { Pagination } from '../components/Pagination';
 import { QuantityControl } from '../components/QuantityControl';
 import { CardTitle } from '../components/CardTitle';
 import {
@@ -15,6 +16,11 @@ import {
   displayDescription,
   displayName,
 } from '../lib/constants';
+import {
+  buildCardCountFilters,
+  buildCardSearchFilters,
+  CARD_SEARCH_PAGE_SIZE,
+} from '../lib/cardSearch';
 
 interface AddToCartPageProps {
   cardSets: string[];
@@ -23,45 +29,52 @@ interface AddToCartPageProps {
 
 export function AddToCartPage({ cardSets, onAdded }: AddToCartPageProps) {
   const [filters, setFilters] = useState<FilterValues>({ ...emptyFilters });
+  const [page, setPage] = useState(1);
   const [cards, setCards] = useState<CardRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<CardRow | null>(null);
   const [variant, setVariant] = useState<CardVariant>('normal');
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
 
   const queryFilters = useMemo(
-    () => ({
-      query: filters.query || undefined,
-      cardSet: filters.cardSet || undefined,
-      classType: filters.classType || undefined,
-      kind: filters.kind || undefined,
-      cost:
-        filters.cost === ''
-          ? undefined
-          : filters.cost === '-1'
-            ? -1
-            : Number(filters.cost),
-      limit: 80,
-    }),
-    [filters],
+    () => buildCardSearchFilters(filters, page),
+    [filters, page],
   );
+
+  const countFilters = useMemo(() => buildCardCountFilters(filters), [filters]);
+
+  const handleFiltersChange = (next: FilterValues) => {
+    setFilters(next);
+    setPage(1);
+  };
 
   const search = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await window.sveApi.searchCards(queryFilters);
+      const [data, count] = await Promise.all([
+        window.sveApi.searchCards(queryFilters),
+        window.sveApi.countSearchCards(countFilters),
+      ]);
       setCards(data);
+      setTotal(count);
     } finally {
       setLoading(false);
     }
-  }, [queryFilters]);
+  }, [queryFilters, countFilters]);
 
   useEffect(() => {
     const timer = setTimeout(search, 250);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const handlePageChange = (nextPage: number) => {
+    setPage(nextPage);
+    listRef.current?.scrollTo({ top: 0 });
+  };
 
   const openAdd = (card: CardRow) => {
     setSelected(card);
@@ -96,9 +109,9 @@ export function AddToCartPage({ cardSets, onAdded }: AddToCartPageProps) {
         </p>
       </header>
 
-      <FilterBar values={filters} onChange={setFilters} cardSets={cardSets} />
+      <FilterBar values={filters} onChange={handleFiltersChange} cardSets={cardSets} />
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
         {loading ? (
           <div className="flex h-40 items-center justify-center text-sve-muted">
             搜索中…
@@ -135,6 +148,13 @@ export function AddToCartPage({ cardSets, onAdded }: AddToCartPageProps) {
           </div>
         )}
       </div>
+
+      <Pagination
+        page={page}
+        pageSize={CARD_SEARCH_PAGE_SIZE}
+        total={total}
+        onChange={handlePageChange}
+      />
 
       <Modal
         open={!!selected}

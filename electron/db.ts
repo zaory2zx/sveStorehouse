@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   buildSearchText,
+  mapCraft,
   toCanonicalId,
 } from './cardUtils.js';
 import { fetchJsonFromUrls } from './fetchUtils.js';
@@ -62,26 +63,63 @@ export interface InventoryRow {
   card_set?: string;
   description?: string;
   description_zh?: string;
+  for_sale_quantity?: number;
 }
 
 export type CartRow = InventoryRow;
+export type ForSaleRow = InventoryRow;
 
 export interface CartFilters extends InventoryFilters {}
 
-export interface TradeRow {
+export type ForSaleFilters = InventoryFilters;
+
+export interface SellFromForSaleInput {
+  items: CreateOrderItemInput[];
+  counterparty?: string | null;
+  tradedAt?: string;
+  note?: string | null;
+}
+
+export interface CreateOrderItemInput {
+  cardId: string;
+  variant: CardVariant;
+  quantity: number;
+  unitPrice?: number | null;
+}
+
+export interface CreateOrderInput {
+  tradeType: TradeType;
+  items: CreateOrderItemInput[];
+  counterparty?: string | null;
+  tradedAt?: string;
+  note?: string | null;
+  totalAmount?: number | null;
+  adjustInventory?: boolean;
+  fromForSale?: boolean;
+}
+
+export interface TradeItemRow {
   id: number;
-  trade_type: TradeType;
+  order_id: number;
   card_id: string;
   variant: CardVariant;
   quantity: number;
   unit_price: number | null;
-  total_amount: number | null;
-  counterparty: string | null;
-  traded_at: string;
-  note: string | null;
+  line_total: number | null;
   name?: string;
   name_zh?: string;
   img_url?: string;
+}
+
+export interface TradeOrderRow {
+  id: number;
+  trade_type: TradeType;
+  counterparty: string | null;
+  traded_at: string;
+  note: string | null;
+  total_amount: number | null;
+  from_for_sale: number;
+  items: TradeItemRow[];
 }
 
 export interface CardFilters {
@@ -296,6 +334,82 @@ function migrateToUnifiedCards(database: Database.Database) {
   database.pragma('user_version = 2');
 }
 
+function migrateShadowcraftClass(database: Database.Database) {
+  const version = database.pragma('user_version', { simple: true }) as number;
+  if (version >= 3) return;
+
+  database.exec(
+    `UPDATE cards SET class = 'Abysscraft' WHERE class = 'Shadowcraft'`,
+  );
+  database.pragma('user_version = 3');
+}
+
+function migrateToTradeOrders(database: Database.Database) {
+  const version = database.pragma('user_version', { simple: true }) as number;
+  if (version >= 4) return;
+
+  const hasTrades = database
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='trades'",
+    )
+    .get() as { name: string } | undefined;
+
+  if (hasTrades) {
+    const oldTrades = database
+      .prepare('SELECT * FROM trades ORDER BY id')
+      .all() as {
+      id: number;
+      trade_type: string;
+      card_id: string;
+      variant: string;
+      quantity: number;
+      unit_price: number | null;
+      total_amount: number | null;
+      counterparty: string | null;
+      traded_at: string;
+      note: string | null;
+    }[];
+
+    const insertOrder = database.prepare(
+      `INSERT INTO trade_orders (
+        trade_type, counterparty, traded_at, note, total_amount, from_for_sale
+      ) VALUES (?, ?, ?, ?, ?, 0)`,
+    );
+    const insertItem = database.prepare(
+      `INSERT INTO trade_items (
+        order_id, card_id, variant, quantity, unit_price, line_total
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+
+    const migrate = database.transaction(() => {
+      for (const trade of oldTrades) {
+        const lineTotal =
+          trade.total_amount ??
+          (trade.unit_price !== null ? trade.unit_price * trade.quantity : null);
+        const orderResult = insertOrder.run(
+          trade.trade_type,
+          trade.counterparty,
+          trade.traded_at,
+          trade.note,
+          trade.total_amount,
+        );
+        insertItem.run(
+          Number(orderResult.lastInsertRowid),
+          trade.card_id,
+          trade.variant,
+          trade.quantity,
+          trade.unit_price,
+          lineTotal,
+        );
+      }
+      database.exec('DROP TABLE trades');
+    });
+    migrate();
+  }
+
+  database.pragma('user_version = 4');
+}
+
 function initSchema(database: Database.Database) {
   database.exec(`
     CREATE TABLE IF NOT EXISTS cards (
@@ -342,6 +456,37 @@ function initSchema(database: Database.Database) {
       FOREIGN KEY (card_id) REFERENCES cards(card_id)
     );
 
+    CREATE TABLE IF NOT EXISTS for_sale (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id TEXT NOT NULL,
+      variant TEXT NOT NULL DEFAULT 'normal',
+      quantity INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(card_id, variant),
+      FOREIGN KEY (card_id) REFERENCES cards(card_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS trade_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trade_type TEXT NOT NULL,
+      counterparty TEXT,
+      traded_at TEXT NOT NULL,
+      note TEXT,
+      total_amount REAL,
+      from_for_sale INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS trade_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      card_id TEXT NOT NULL,
+      variant TEXT NOT NULL DEFAULT 'normal',
+      quantity INTEGER NOT NULL,
+      unit_price REAL,
+      line_total REAL,
+      FOREIGN KEY (order_id) REFERENCES trade_orders(id) ON DELETE CASCADE,
+      FOREIGN KEY (card_id) REFERENCES cards(card_id)
+    );
+
     CREATE TABLE IF NOT EXISTS trades (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       trade_type TEXT NOT NULL,
@@ -359,6 +504,8 @@ function initSchema(database: Database.Database) {
 
   migrateSchema(database);
   migrateToUnifiedCards(database);
+  migrateShadowcraftClass(database);
+  migrateToTradeOrders(database);
 
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_cards_name ON cards(name);
@@ -369,7 +516,9 @@ function initSchema(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_cards_class ON cards(class);
     CREATE INDEX IF NOT EXISTS idx_inventory_card ON inventory(card_id);
     CREATE INDEX IF NOT EXISTS idx_cart_card ON cart(card_id);
-    CREATE INDEX IF NOT EXISTS idx_trades_date ON trades(traded_at);
+    CREATE INDEX IF NOT EXISTS idx_for_sale_card ON for_sale(card_id);
+    CREATE INDEX IF NOT EXISTS idx_trade_orders_date ON trade_orders(traded_at);
+    CREATE INDEX IF NOT EXISTS idx_trade_items_order ON trade_items(order_id);
   `);
 }
 
@@ -474,7 +623,7 @@ function upsertEnFallbackCards(
         card_set: c.cardSet,
         card_number: c.cardNumber.replace(/SC$/i, ''),
         kind: c.kind,
-        class: c.class,
+        class: mapCraft(c.class),
         trait: c.trait ?? '',
         name: c.name,
         name_en: c.name,
@@ -565,8 +714,10 @@ function buildSearchCondition(alias = ''): string {
   )`;
 }
 
-export function searchCards(filters: CardFilters = {}): CardRow[] {
-  const database = getDatabase();
+function buildCardFilterClause(filters: CardFilters): {
+  where: string;
+  params: Record<string, string | number>;
+} {
   const conditions: string[] = [];
   const params: Record<string, string | number> = {};
 
@@ -595,6 +746,21 @@ export function searchCards(filters: CardFilters = {}): CardRow[] {
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  return { where, params };
+}
+
+export function countSearchCards(filters: CardFilters = {}): number {
+  const database = getDatabase();
+  const { where, params } = buildCardFilterClause(filters);
+  const row = database
+    .prepare(`SELECT COUNT(*) as count FROM cards ${where}`)
+    .get(params) as { count: number };
+  return row.count;
+}
+
+export function searchCards(filters: CardFilters = {}): CardRow[] {
+  const database = getDatabase();
+  const { where, params } = buildCardFilterClause(filters);
   const limit = filters.limit ?? 60;
   const offset = filters.offset ?? 0;
 
@@ -617,19 +783,38 @@ export function getCardSets(): string[] {
 }
 
 export function getInventory(filters: InventoryFilters = {}): InventoryRow[] {
-  return queryCardList('inventory', filters);
+  const database = getDatabase();
+  const { where, params } = buildCardListFilterConditions('i', filters);
+  const limit = filters.limit ?? 200;
+  const offset = filters.offset ?? 0;
+
+  return database
+    .prepare(
+      `SELECT i.*, COALESCE(fs.quantity, 0) as for_sale_quantity,
+              c.name, c.name_zh, c.name_en, c.locale, c.class, c.kind, c.cost,
+              c.atk, c.def, c.img_url, c.card_set, c.description, c.description_zh
+       FROM inventory i
+       JOIN cards c ON c.card_id = i.card_id
+       LEFT JOIN for_sale fs ON fs.card_id = i.card_id AND fs.variant = i.variant
+       ${where}
+       ORDER BY c.card_set, COALESCE(c.name_zh, c.name), i.variant
+       LIMIT @limit OFFSET @offset`,
+    )
+    .all({ ...params, limit, offset }) as InventoryRow[];
 }
 
 export function getCart(filters: CartFilters = {}): CartRow[] {
   return queryCardList('cart', filters);
 }
 
-function queryCardList(
-  table: 'inventory' | 'cart',
+export function getForSale(filters: ForSaleFilters = {}): ForSaleRow[] {
+  return queryCardList('for_sale', filters);
+}
+
+function buildCardListFilterConditions(
+  alias: string,
   filters: InventoryFilters,
-): InventoryRow[] {
-  const database = getDatabase();
-  const alias = table === 'inventory' ? 'i' : 'w';
+): { where: string; params: Record<string, string | number> } {
   const conditions: string[] = [`${alias}.quantity > 0`];
   const params: Record<string, string | number> = {};
 
@@ -658,7 +843,16 @@ function queryCardList(
     params.cost = filters.cost;
   }
 
-  const where = `WHERE ${conditions.join(' AND ')}`;
+  return { where: `WHERE ${conditions.join(' AND ')}`, params };
+}
+
+function queryCardList(
+  table: 'cart' | 'for_sale',
+  filters: InventoryFilters,
+): InventoryRow[] {
+  const database = getDatabase();
+  const alias = table === 'cart' ? 'w' : 'f';
+  const { where, params } = buildCardListFilterConditions(alias, filters);
   const limit = filters.limit ?? 200;
   const offset = filters.offset ?? 0;
 
@@ -695,7 +889,7 @@ function resolveCardId(cardId: string): string {
 }
 
 function adjustCardList(
-  table: 'inventory' | 'cart',
+  table: 'inventory' | 'cart' | 'for_sale',
   cardId: string,
   variant: CardVariant,
   delta: number,
@@ -750,6 +944,29 @@ function adjustCart(
   return adjustCardList('cart', cardId, variant, delta, '数量不足');
 }
 
+function adjustForSale(
+  cardId: string,
+  variant: CardVariant,
+  delta: number,
+): number {
+  return adjustCardList('for_sale', cardId, variant, delta, '待售数量不足');
+}
+
+function getCardListQuantity(
+  table: 'inventory' | 'for_sale',
+  cardId: string,
+  variant: CardVariant,
+): number {
+  const database = getDatabase();
+  const resolvedId = resolveCardId(cardId);
+  const row = database
+    .prepare(
+      `SELECT quantity FROM ${table} WHERE card_id = ? AND variant = ?`,
+    )
+    .get(resolvedId, variant) as { quantity: number } | undefined;
+  return row?.quantity ?? 0;
+}
+
 export function addInventory(
   cardId: string,
   variant: CardVariant,
@@ -765,7 +982,15 @@ export function removeInventory(
   quantity: number,
 ): number {
   if (quantity <= 0) throw new Error('数量必须大于 0');
-  return adjustInventory(cardId, variant, -quantity);
+  const resolvedId = resolveCardId(cardId);
+  const inventoryQty = getCardListQuantity('inventory', resolvedId, variant);
+  const forSaleQty = getCardListQuantity('for_sale', resolvedId, variant);
+  if (inventoryQty - quantity < forSaleQty) {
+    throw new Error(
+      `库存中有 ${forSaleQty} 张待售，请先取消待售或减少待售数量`,
+    );
+  }
+  return adjustInventory(resolvedId, variant, -quantity);
 }
 
 export function setInventory(
@@ -802,8 +1027,239 @@ export function setCart(
   return setCardListQuantity('cart', cardId, variant, quantity);
 }
 
+export function markForSale(
+  cardId: string,
+  variant: CardVariant,
+  quantity: number,
+): number {
+  if (quantity <= 0) throw new Error('数量必须大于 0');
+  const resolvedId = resolveCardId(cardId);
+  const inventoryQty = getCardListQuantity('inventory', resolvedId, variant);
+  const forSaleQty = getCardListQuantity('for_sale', resolvedId, variant);
+  const available = inventoryQty - forSaleQty;
+  if (quantity > available) {
+    throw new Error(`可标记待售数量不足，当前最多 ${available} 张`);
+  }
+  return adjustForSale(resolvedId, variant, quantity);
+}
+
+export function addToForSale(
+  cardId: string,
+  variant: CardVariant,
+  quantity: number,
+): number {
+  if (quantity <= 0) throw new Error('数量必须大于 0');
+  const database = getDatabase();
+  const resolvedId = resolveCardId(cardId);
+
+  const run = database.transaction(() => {
+    adjustInventory(resolvedId, variant, quantity);
+    adjustForSale(resolvedId, variant, quantity);
+  });
+  run();
+
+  return getCardListQuantity('for_sale', resolvedId, variant);
+}
+
+export function unmarkForSale(
+  cardId: string,
+  variant: CardVariant,
+  quantity: number,
+): number {
+  if (quantity <= 0) throw new Error('数量必须大于 0');
+  return adjustForSale(cardId, variant, -quantity);
+}
+
+export function sellFromForSale(input: SellFromForSaleInput): TradeOrderRow {
+  return createOrder({
+    tradeType: 'sell',
+    items: input.items,
+    counterparty: input.counterparty,
+    tradedAt: input.tradedAt,
+    note: input.note,
+    fromForSale: true,
+    adjustInventory: true,
+  });
+}
+
+function loadOrderItems(database: Database.Database, orderId: number): TradeItemRow[] {
+  return database
+    .prepare(
+      `SELECT ti.*, c.name, c.name_zh, c.img_url
+       FROM trade_items ti
+       JOIN cards c ON c.card_id = ti.card_id
+       WHERE ti.order_id = ?
+       ORDER BY ti.id`,
+    )
+    .all(orderId) as TradeItemRow[];
+}
+
+export function getOrderById(id: number): TradeOrderRow | undefined {
+  const database = getDatabase();
+  const order = database
+    .prepare('SELECT * FROM trade_orders WHERE id = ?')
+    .get(id) as Omit<TradeOrderRow, 'items'> | undefined;
+  if (!order) return undefined;
+  return { ...order, items: loadOrderItems(database, id) };
+}
+
+export function createOrder(input: CreateOrderInput): TradeOrderRow {
+  const database = getDatabase();
+  const {
+    tradeType,
+    items,
+    counterparty = null,
+    note = null,
+    adjustInventory: shouldAdjustInventory = tradeType !== 'exchange',
+    fromForSale = false,
+  } = input;
+
+  if (!items.length) throw new Error('订单至少包含一张卡牌');
+
+  const resolvedItems = items.map((item) => {
+    if (item.quantity <= 0) throw new Error('数量必须大于 0');
+    const resolvedId = resolveCardId(item.cardId);
+    const unitPrice = item.unitPrice ?? null;
+    const lineTotal =
+      unitPrice !== null ? unitPrice * item.quantity : null;
+    return {
+      resolvedId,
+      variant: item.variant,
+      quantity: item.quantity,
+      unitPrice,
+      lineTotal,
+    };
+  });
+
+  let totalAmount = input.totalAmount ?? null;
+  if (totalAmount === null) {
+    const sum = resolvedItems.reduce(
+      (acc, item) => acc + (item.lineTotal ?? 0),
+      0,
+    );
+    totalAmount = sum > 0 ? sum : null;
+  }
+
+  const tradedAt = input.tradedAt ?? new Date().toISOString();
+
+  const orderId = database.transaction(() => {
+    if (fromForSale) {
+      for (const item of resolvedItems) {
+        const forSaleQty = getCardListQuantity(
+          'for_sale',
+          item.resolvedId,
+          item.variant,
+        );
+        if (forSaleQty < item.quantity) {
+          throw new Error(
+            `待售数量不足（${item.resolvedId}），当前仅有 ${forSaleQty} 张`,
+          );
+        }
+        const inventoryQty = getCardListQuantity(
+          'inventory',
+          item.resolvedId,
+          item.variant,
+        );
+        if (inventoryQty < item.quantity) {
+          throw new Error(
+            `库存不足（${item.resolvedId}），当前仅有 ${inventoryQty} 张`,
+          );
+        }
+      }
+    }
+
+    const orderResult = database
+      .prepare(
+        `INSERT INTO trade_orders (
+          trade_type, counterparty, traded_at, note, total_amount, from_for_sale
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        tradeType,
+        counterparty,
+        tradedAt,
+        note,
+        totalAmount,
+        fromForSale ? 1 : 0,
+      );
+
+    const oid = Number(orderResult.lastInsertRowid);
+    const insertItem = database.prepare(
+      `INSERT INTO trade_items (
+        order_id, card_id, variant, quantity, unit_price, line_total
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+
+    for (const item of resolvedItems) {
+      insertItem.run(
+        oid,
+        item.resolvedId,
+        item.variant,
+        item.quantity,
+        item.unitPrice,
+        item.lineTotal,
+      );
+
+      if (shouldAdjustInventory) {
+        if (tradeType === 'buy') {
+          adjustInventory(item.resolvedId, item.variant, item.quantity);
+        } else if (tradeType === 'sell') {
+          if (fromForSale) {
+            adjustForSale(item.resolvedId, item.variant, -item.quantity);
+            adjustInventory(item.resolvedId, item.variant, -item.quantity);
+          } else {
+            removeInventory(item.resolvedId, item.variant, item.quantity);
+          }
+        }
+      }
+    }
+
+    return oid;
+  })();
+
+  return getOrderById(orderId)!;
+}
+
+export function getOrders(limit = 100, offset = 0): TradeOrderRow[] {
+  const database = getDatabase();
+  const orders = database
+    .prepare(
+      `SELECT * FROM trade_orders
+       ORDER BY traded_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(limit, offset) as Omit<TradeOrderRow, 'items'>[];
+
+  return orders.map((order) => ({
+    ...order,
+    items: loadOrderItems(database, order.id),
+  }));
+}
+
+export function deleteOrder(id: number, revertInventory = false): void {
+  const database = getDatabase();
+  const order = getOrderById(id);
+  if (!order) throw new Error('订单不存在');
+
+  if (revertInventory && order.trade_type !== 'exchange') {
+    for (const item of order.items) {
+      const variant = item.variant as CardVariant;
+      if (order.trade_type === 'buy') {
+        removeInventory(item.card_id, variant, item.quantity);
+      } else if (order.trade_type === 'sell') {
+        addInventory(item.card_id, variant, item.quantity);
+        if (order.from_for_sale) {
+          markForSale(item.card_id, variant, item.quantity);
+        }
+      }
+    }
+  }
+
+  database.prepare('DELETE FROM trade_orders WHERE id = ?').run(id);
+}
+
 function setCardListQuantity(
-  table: 'inventory' | 'cart',
+  table: 'inventory' | 'cart' | 'for_sale',
   cardId: string,
   variant: CardVariant,
   quantity: number,
@@ -826,113 +1282,6 @@ function setCardListQuantity(
     )
     .run(resolvedId, variant, quantity);
   return quantity;
-}
-
-export interface CreateTradeInput {
-  tradeType: TradeType;
-  cardId: string;
-  variant: CardVariant;
-  quantity: number;
-  unitPrice?: number | null;
-  totalAmount?: number | null;
-  counterparty?: string | null;
-  tradedAt?: string;
-  note?: string | null;
-  adjustInventory?: boolean;
-}
-
-export function createTrade(input: CreateTradeInput): TradeRow {
-  const database = getDatabase();
-  const {
-    tradeType,
-    cardId,
-    variant,
-    quantity,
-    unitPrice = null,
-    counterparty = null,
-    note = null,
-    adjustInventory = true,
-  } = input;
-
-  if (quantity <= 0) throw new Error('数量必须大于 0');
-
-  let totalAmount = input.totalAmount ?? null;
-  if (totalAmount === null && unitPrice !== null) {
-    totalAmount = unitPrice * quantity;
-  }
-
-  const tradedAt = input.tradedAt ?? new Date().toISOString();
-  const resolvedId = resolveCardId(cardId);
-
-  const result = database
-    .prepare(
-      `INSERT INTO trades (
-        trade_type, card_id, variant, quantity, unit_price, total_amount,
-        counterparty, traded_at, note
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      tradeType,
-      resolvedId,
-      variant,
-      quantity,
-      unitPrice,
-      totalAmount,
-      counterparty,
-      tradedAt,
-      note,
-    );
-
-  if (adjustInventory) {
-    if (tradeType === 'buy') {
-      addInventory(resolvedId, variant, quantity);
-    } else if (tradeType === 'sell') {
-      removeInventory(resolvedId, variant, quantity);
-    }
-  }
-
-  return getTradeById(Number(result.lastInsertRowid))!;
-}
-
-export function getTrades(limit = 100, offset = 0): TradeRow[] {
-  const database = getDatabase();
-  return database
-    .prepare(
-      `SELECT t.*, c.name, c.name_zh, c.img_url
-       FROM trades t
-       JOIN cards c ON c.card_id = t.card_id
-       ORDER BY t.traded_at DESC, t.id DESC
-       LIMIT ? OFFSET ?`,
-    )
-    .all(limit, offset) as TradeRow[];
-}
-
-export function getTradeById(id: number): TradeRow | undefined {
-  const database = getDatabase();
-  return database
-    .prepare(
-      `SELECT t.*, c.name, c.name_zh, c.img_url
-       FROM trades t
-       JOIN cards c ON c.card_id = t.card_id
-       WHERE t.id = ?`,
-    )
-    .get(id) as TradeRow | undefined;
-}
-
-export function deleteTrade(id: number, revertInventory = false): void {
-  const database = getDatabase();
-  const trade = getTradeById(id);
-  if (!trade) throw new Error('交易记录不存在');
-
-  if (revertInventory) {
-    if (trade.trade_type === 'buy') {
-      removeInventory(trade.card_id, trade.variant as CardVariant, trade.quantity);
-    } else if (trade.trade_type === 'sell') {
-      addInventory(trade.card_id, trade.variant as CardVariant, trade.quantity);
-    }
-  }
-
-  database.prepare('DELETE FROM trades WHERE id = ?').run(id);
 }
 
 export function getStats(): StatsSummary {
@@ -990,12 +1339,12 @@ export function getTradeStats(): {
   const database = getDatabase();
   const buy = database
     .prepare(
-      `SELECT COALESCE(SUM(total_amount), 0) as total FROM trades WHERE trade_type = 'buy'`,
+      `SELECT COALESCE(SUM(total_amount), 0) as total FROM trade_orders WHERE trade_type = 'buy'`,
     )
     .get() as { total: number };
   const sell = database
     .prepare(
-      `SELECT COALESCE(SUM(total_amount), 0) as total FROM trades WHERE trade_type = 'sell'`,
+      `SELECT COALESCE(SUM(total_amount), 0) as total FROM trade_orders WHERE trade_type = 'sell'`,
     )
     .get() as { total: number };
 

@@ -1,7 +1,7 @@
 export type CardVariant = 'normal' | 'premium' | 'alt_art' | 'pr';
 export type CardLocale = 'en' | 'sc';
 export type TradeType = 'buy' | 'sell' | 'exchange';
-export type Page = 'inventory' | 'add' | 'cart' | 'addCart' | 'trades' | 'stats';
+export type Page = 'inventory' | 'forSale' | 'add' | 'cart' | 'addCart' | 'trades' | 'stats';
 
 export interface CardRow {
   card_id: string;
@@ -47,24 +47,34 @@ export interface InventoryRow {
   card_set?: string;
   description?: string;
   description_zh?: string;
+  for_sale_quantity?: number;
 }
 
 export type CartRow = InventoryRow;
+export type ForSaleRow = InventoryRow;
 
-export interface TradeRow {
+export interface TradeItemRow {
   id: number;
-  trade_type: TradeType;
+  order_id: number;
   card_id: string;
   variant: CardVariant;
   quantity: number;
   unit_price: number | null;
-  total_amount: number | null;
-  counterparty: string | null;
-  traded_at: string;
-  note: string | null;
+  line_total: number | null;
   name?: string;
   name_zh?: string;
   img_url?: string;
+}
+
+export interface TradeOrderRow {
+  id: number;
+  trade_type: TradeType;
+  counterparty: string | null;
+  traded_at: string;
+  note: string | null;
+  total_amount: number | null;
+  from_for_sale: number;
+  items: TradeItemRow[];
 }
 
 export interface StatsSummary {

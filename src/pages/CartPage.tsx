@@ -5,6 +5,7 @@ import { emptyFilters, FilterBar, FilterValues } from '../components/FilterBar';
 import { Modal } from '../components/Modal';
 import { QuantityControl } from '../components/QuantityControl';
 import { CardTitle } from '../components/CardTitle';
+import { ExportImageButton } from '../components/ExportImageButton';
 import {
   CLASS_LABELS,
   CartRow,
@@ -94,11 +95,19 @@ export function CartPage({ cardSets, refreshKey, onChanged }: CartPageProps) {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <header>
-        <h2 className="text-2xl font-bold text-sve-text">购物车</h2>
-        <p className="mt-1 text-sm text-sve-muted">
-          共 {items.length} 条记录 · 计划购入的卡牌清单
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-sve-text">购物车</h2>
+          <p className="mt-1 text-sm text-sve-muted">
+            共 {items.length} 条记录 · 计划购入的卡牌清单
+          </p>
+        </div>
+        <ExportImageButton
+          title="购物车"
+          filenamePrefix="SVE购物车"
+          disabled={loading}
+          loadItems={() => window.sveApi.getCart({ limit: 10000 })}
+        />
       </header>
 
       <FilterBar

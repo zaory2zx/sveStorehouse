@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardImage } from '../components/CardImage';
 import { CraftIcon } from '../components/CraftIcon';
 import { emptyFilters, FilterBar, FilterValues } from '../components/FilterBar';
 import { Modal } from '../components/Modal';
+import { Pagination } from '../components/Pagination';
 import { QuantityControl } from '../components/QuantityControl';
 import { CardTitle } from '../components/CardTitle';
 import {
@@ -15,6 +16,11 @@ import {
   displayDescription,
   displayName,
 } from '../lib/constants';
+import {
+  buildCardCountFilters,
+  buildCardSearchFilters,
+  CARD_SEARCH_PAGE_SIZE,
+} from '../lib/cardSearch';
 
 interface AddCardPageProps {
   cardSets: string[];
@@ -23,45 +29,52 @@ interface AddCardPageProps {
 
 export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
   const [filters, setFilters] = useState<FilterValues>({ ...emptyFilters });
+  const [page, setPage] = useState(1);
   const [cards, setCards] = useState<CardRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<CardRow | null>(null);
   const [variant, setVariant] = useState<CardVariant>('normal');
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
 
   const queryFilters = useMemo(
-    () => ({
-      query: filters.query || undefined,
-      cardSet: filters.cardSet || undefined,
-      classType: filters.classType || undefined,
-      kind: filters.kind || undefined,
-      cost:
-        filters.cost === ''
-          ? undefined
-          : filters.cost === '-1'
-            ? -1
-            : Number(filters.cost),
-      limit: 80,
-    }),
-    [filters],
+    () => buildCardSearchFilters(filters, page),
+    [filters, page],
   );
+
+  const countFilters = useMemo(() => buildCardCountFilters(filters), [filters]);
+
+  const handleFiltersChange = (next: FilterValues) => {
+    setFilters(next);
+    setPage(1);
+  };
 
   const search = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await window.sveApi.searchCards(queryFilters);
+      const [data, count] = await Promise.all([
+        window.sveApi.searchCards(queryFilters),
+        window.sveApi.countSearchCards(countFilters),
+      ]);
       setCards(data);
+      setTotal(count);
     } finally {
       setLoading(false);
     }
-  }, [queryFilters]);
+  }, [queryFilters, countFilters]);
 
   useEffect(() => {
     const timer = setTimeout(search, 250);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const handlePageChange = (nextPage: number) => {
+    setPage(nextPage);
+    listRef.current?.scrollTo({ top: 0 });
+  };
 
   const openAdd = (card: CardRow) => {
     setSelected(card);
@@ -71,12 +84,17 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
     setSuccess('');
   };
 
-  const confirmAdd = async () => {
+  const confirmAdd = async (target: 'inventory' | 'forSale') => {
     if (!selected) return;
     setError('');
     try {
-      await window.sveApi.addInventory(selected.card_id, variant, quantity);
-      setSuccess(`已添加 ${displayName(selected)} ×${quantity}`);
+      if (target === 'inventory') {
+        await window.sveApi.addInventory(selected.card_id, variant, quantity);
+        setSuccess(`已添加到库存 ${displayName(selected)} ×${quantity}`);
+      } else {
+        await window.sveApi.addToForSale(selected.card_id, variant, quantity);
+        setSuccess(`已添加到待售 ${displayName(selected)} ×${quantity}`);
+      }
       onAdded();
       setTimeout(() => {
         setSelected(null);
@@ -96,9 +114,9 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
         </p>
       </header>
 
-      <FilterBar values={filters} onChange={setFilters} cardSets={cardSets} />
+      <FilterBar values={filters} onChange={handleFiltersChange} cardSets={cardSets} />
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
         {loading ? (
           <div className="flex h-40 items-center justify-center text-sve-muted">
             搜索中…
@@ -135,6 +153,13 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
           </div>
         )}
       </div>
+
+      <Pagination
+        page={page}
+        pageSize={CARD_SEARCH_PAGE_SIZE}
+        total={total}
+        onChange={handlePageChange}
+      />
 
       <Modal
         open={!!selected}
@@ -206,8 +231,19 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
               >
                 取消
               </button>
-              <button type="button" className="btn-primary" onClick={confirmAdd}>
-                确认添加
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => confirmAdd('forSale')}
+              >
+                添加到待售
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => confirmAdd('inventory')}
+              >
+                添加到库存
               </button>
             </div>
           </div>
