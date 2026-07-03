@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  background: #0d0f14;
+  color: #e8e6e3;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #161a22;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a4258;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a5570;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-sve-border bg-gradient-to-br from-sve-surface to-[#131720] shadow-card;
+  }
+
+  .btn-primary {
+    @apply rounded-lg bg-gradient-to-b from-sve-gold to-sve-goldDim px-4 py-2 text-sm font-semibold text-sve-bg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply rounded-lg border border-sve-border bg-sve-card px-4 py-2 text-sm text-sve-text transition hover:border-sve-gold/40 hover:bg-sve-border/30 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply rounded-lg border border-red-900/50 bg-red-950/40 px-3 py-1.5 text-sm text-red-300 transition hover:bg-red-900/40;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-sve-border bg-sve-bg px-3 py-2 text-sm text-sve-text outline-none transition placeholder:text-sve-muted focus:border-sve-gold/50 focus:ring-1 focus:ring-sve-gold/30;
+  }
+
+  .select-field {
+    @apply rounded-lg border border-sve-border bg-sve-bg px-3 py-2 text-sm text-sve-text outline-none transition focus:border-sve-gold/50;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium;
+  }
+}

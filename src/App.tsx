@@ -1,0 +1,142 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Sidebar } from './components/Sidebar';
+import { Page } from './lib/constants';
+import { AddCardPage } from './pages/AddCardPage';
+import { AddToCartPage } from './pages/AddToCartPage';
+import { CartPage } from './pages/CartPage';
+import { InventoryPage } from './pages/InventoryPage';
+import { StatsPage } from './pages/StatsPage';
+import { TradesPage } from './pages/TradesPage';
+
+export default function App() {
+  const [page, setPage] = useState<Page>('inventory');
+  const [cardCount, setCardCount] = useState(0);
+  const [cardSets, setCardSets] = useState<string[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [initState, setInitState] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading');
+  const [initMessage, setInitMessage] = useState('正在初始化…');
+  const [syncing, setSyncing] = useState(false);
+
+  const refreshMeta = useCallback(async () => {
+    const [count, sets] = await Promise.all([
+      window.sveApi.getCardCount(),
+      window.sveApi.getCardSets(),
+    ]);
+    setCardCount(count);
+    setCardSets(sets);
+  }, []);
+
+  const bump = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setInitMessage('正在加载卡库，首次启动可能需要下载…');
+        const result = await window.sveApi.init();
+        if (result.cached) {
+          setInitMessage(`卡库已就绪（${result.total} 张）`);
+        } else if (result.syncError) {
+          setInitMessage(
+            `卡库已部分同步（${result.total} 张）；部分数据失败，请点「同步卡库」重试`,
+          );
+        } else {
+          setInitMessage(`卡库已同步（${result.total} 张）`);
+        }
+        await refreshMeta();
+        setInitState('ready');
+      } catch (e) {
+        setInitMessage(
+          e instanceof Error ? e.message : '初始化失败，请检查网络连接',
+        );
+        setInitState('error');
+      }
+    })();
+  }, [refreshMeta]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const result = await window.sveApi.syncCards();
+      await refreshMeta();
+      bump();
+      if (result.syncError) {
+        alert(
+          `卡库已更新（${result.total} 张）\n部分数据同步失败：${result.syncError}`,
+        );
+      } else {
+        alert(`卡库已更新（${result.total} 张）`);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '同步失败');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  if (initState === 'loading') {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-sve-bg">
+        <div className="h-12 w-12 animate-spin rounded-full border-2 border-sve-gold border-t-transparent" />
+        <p className="text-sve-muted">{initMessage}</p>
+      </div>
+    );
+  }
+
+  if (initState === 'error') {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-sve-bg p-8 text-center">
+        <p className="text-red-400">{initMessage}</p>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => window.location.reload()}
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full bg-sve-bg">
+      <Sidebar
+        page={page}
+        onNavigate={setPage}
+        cardCount={cardCount}
+        onSync={handleSync}
+        syncing={syncing}
+      />
+
+      <main className="min-w-0 flex-1 overflow-hidden">
+        {page === 'inventory' && (
+          <InventoryPage
+            cardSets={cardSets}
+            refreshKey={refreshKey}
+            onChanged={bump}
+          />
+        )}
+        {page === 'add' && (
+          <AddCardPage cardSets={cardSets} onAdded={bump} />
+        )}
+        {page === 'cart' && (
+          <CartPage
+            cardSets={cardSets}
+            refreshKey={refreshKey}
+            onChanged={bump}
+          />
+        )}
+        {page === 'addCart' && (
+          <AddToCartPage cardSets={cardSets} onAdded={bump} />
+        )}
+        {page === 'trades' && (
+          <TradesPage refreshKey={refreshKey} onChanged={bump} />
+        )}
+        {page === 'stats' && <StatsPage refreshKey={refreshKey} />}
+      </main>
+    </div>
+  );
+}
