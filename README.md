@@ -1,4 +1,4 @@
-# SVE 小仓库
+# SVE 小仓库 (sveStorehouse)
 
 影之诗进化对决（Shadowverse: Evolve）卡牌库存管理桌面应用。
 
