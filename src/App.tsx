@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Page } from './lib/constants';
 import { AddCardPage } from './pages/AddCardPage';
-import { AddToCartPage } from './pages/AddToCartPage';
 import { CartPage } from './pages/CartPage';
 import { ForSalePage } from './pages/ForSalePage';
 import { InventoryPage } from './pages/InventoryPage';
@@ -13,6 +12,7 @@ export default function App() {
   const [page, setPage] = useState<Page>('inventory');
   const [cardCount, setCardCount] = useState(0);
   const [cardSets, setCardSets] = useState<string[]>([]);
+  const [cardRares, setCardRares] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [initState, setInitState] = useState<
     'loading' | 'ready' | 'error'
@@ -21,12 +21,14 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
 
   const refreshMeta = useCallback(async () => {
-    const [count, sets] = await Promise.all([
+    const [count, sets, rares] = await Promise.all([
       window.sveApi.getCardCount(),
       window.sveApi.getCardSets(),
+      window.sveApi.getCardRares(),
     ]);
     setCardCount(count);
     setCardSets(sets);
+    setCardRares(rares);
   }, []);
 
   const bump = useCallback(() => {
@@ -116,6 +118,7 @@ export default function App() {
         {page === 'inventory' && (
           <InventoryPage
             cardSets={cardSets}
+            cardRares={cardRares}
             refreshKey={refreshKey}
             onChanged={bump}
           />
@@ -123,22 +126,21 @@ export default function App() {
         {page === 'forSale' && (
           <ForSalePage
             cardSets={cardSets}
+            cardRares={cardRares}
             refreshKey={refreshKey}
             onChanged={bump}
           />
         )}
         {page === 'add' && (
-          <AddCardPage cardSets={cardSets} onAdded={bump} />
+          <AddCardPage cardSets={cardSets} cardRares={cardRares} onAdded={bump} />
         )}
         {page === 'cart' && (
           <CartPage
             cardSets={cardSets}
+            cardRares={cardRares}
             refreshKey={refreshKey}
             onChanged={bump}
           />
-        )}
-        {page === 'addCart' && (
-          <AddToCartPage cardSets={cardSets} onAdded={bump} />
         )}
         {page === 'trades' && (
           <TradesPage refreshKey={refreshKey} onChanged={bump} />

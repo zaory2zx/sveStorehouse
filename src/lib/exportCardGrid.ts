@@ -1,8 +1,8 @@
 import {
   CardVariant,
-  VARIANT_LABELS,
   displayCardId,
   displayName,
+  displayRare,
 } from './constants';
 
 export interface CardListExportItem {
@@ -12,6 +12,7 @@ export interface CardListExportItem {
   name_en?: string;
   card_id: string;
   canonical_id?: string;
+  rare?: string;
   variant: CardVariant;
   quantity: number;
 }
@@ -223,8 +224,7 @@ export async function renderCardListImage(options: {
 
     const name = displayName(item);
     const cardNo = displayCardId(item);
-    const variantLabel =
-      item.variant !== 'normal' ? VARIANT_LABELS[item.variant] : '';
+    const rareLabel = item.rare ? displayRare(item.rare) : '';
 
     ctx.fillStyle = COLORS.text;
     ctx.font = '13px "Microsoft YaHei", "PingFang SC", sans-serif';
@@ -232,7 +232,7 @@ export async function renderCardListImage(options: {
 
     ctx.fillStyle = COLORS.muted;
     ctx.font = '11px "Microsoft YaHei", "PingFang SC", sans-serif';
-    const sub = [cardNo, variantLabel].filter(Boolean).join(' · ');
+    const sub = [cardNo, rareLabel].filter(Boolean).join(' · ');
     ctx.fillText(truncateText(ctx, sub, cardW), x, y + cardH + 36);
   }
 

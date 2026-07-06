@@ -3,6 +3,7 @@ import {
   inferScImageUrl,
   mapCraft,
   mapKind,
+  normalizeRare,
 } from './cardUtils.js';
 import { fetchWithRetry } from './fetchUtils.js';
 
@@ -46,6 +47,7 @@ export interface UnifiedCardRecord {
   description_zh: string;
   description_ja: string;
   search_text: string;
+  rare: string;
   img_url: string;
   cost: number;
   atk: number;
@@ -103,13 +105,15 @@ export function sveHelperToUnifiedRecord(
   const nameEn = enNameByCanonical.get(canonical) ?? '';
   const descEn = enDescByCanonical.get(canonical) ?? '';
 
+  const kind = mapKind(card.card_type);
+
   return {
     card_id: canonical,
     canonical_id: canonical,
     locale: 'sc',
     card_set: cardSet,
     card_number: canonical.split('-')[1] ?? '',
-    kind: mapKind(card.card_type),
+    kind,
     class: mapCraft(card.craft),
     trait: card.type ?? '',
     name: card.name_cn || card.name_jp,
@@ -130,7 +134,9 @@ export function sveHelperToUnifiedRecord(
       descEn,
       card.type,
       cardSet,
+      normalizeRare(card.rare, card.card_type, kind),
     ]),
+    rare: normalizeRare(card.rare, card.card_type, kind),
     img_url: card.img_url || inferScImageUrl(card.card_no, card.from),
     cost: card.cost,
     atk: card.attack,

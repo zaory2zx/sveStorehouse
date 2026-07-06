@@ -8,13 +8,12 @@ import { QuantityControl } from '../components/QuantityControl';
 import { CardTitle } from '../components/CardTitle';
 import {
   CardRow,
-  CardVariant,
   CLASS_LABELS,
   KIND_LABELS,
-  VARIANT_LABELS,
   displayCardId,
   displayDescription,
   displayName,
+  displayRare,
 } from '../lib/constants';
 import {
   buildCardCountFilters,
@@ -24,17 +23,17 @@ import {
 
 interface AddCardPageProps {
   cardSets: string[];
+  cardRares: string[];
   onAdded: () => void;
 }
 
-export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
+export function AddCardPage({ cardSets, cardRares, onAdded }: AddCardPageProps) {
   const [filters, setFilters] = useState<FilterValues>({ ...emptyFilters });
   const [page, setPage] = useState(1);
   const [cards, setCards] = useState<CardRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<CardRow | null>(null);
-  const [variant, setVariant] = useState<CardVariant>('normal');
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -78,22 +77,24 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
 
   const openAdd = (card: CardRow) => {
     setSelected(card);
-    setVariant('normal');
     setQuantity(1);
     setError('');
     setSuccess('');
   };
 
-  const confirmAdd = async (target: 'inventory' | 'forSale') => {
+  const confirmAdd = async (target: 'inventory' | 'forSale' | 'cart') => {
     if (!selected) return;
     setError('');
     try {
       if (target === 'inventory') {
-        await window.sveApi.addInventory(selected.card_id, variant, quantity);
+        await window.sveApi.addInventory(selected.card_id, 'normal', quantity);
         setSuccess(`已添加到库存 ${displayName(selected)} ×${quantity}`);
-      } else {
-        await window.sveApi.addToForSale(selected.card_id, variant, quantity);
+      } else if (target === 'forSale') {
+        await window.sveApi.addToForSale(selected.card_id, 'normal', quantity);
         setSuccess(`已添加到待售 ${displayName(selected)} ×${quantity}`);
+      } else {
+        await window.sveApi.addCart(selected.card_id, 'normal', quantity);
+        setSuccess(`已加入购物车 ${displayName(selected)} ×${quantity}`);
       }
       onAdded();
       setTimeout(() => {
@@ -110,11 +111,17 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
       <header>
         <h2 className="text-2xl font-bold text-sve-text">添加卡牌</h2>
         <p className="mt-1 text-sm text-sve-muted">
-          搜索支持中文/英文/日文名、卡号与效果文本
+          搜索卡牌后可添加到库存、待售或购物车
         </p>
       </header>
 
-      <FilterBar values={filters} onChange={handleFiltersChange} cardSets={cardSets} />
+      <FilterBar
+        values={filters}
+        onChange={handleFiltersChange}
+        cardSets={cardSets}
+        cardRares={cardRares}
+        showRare
+      />
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
         {loading ? (
@@ -147,6 +154,7 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
                 </div>
                 <p className="mt-0.5 truncate text-xs text-sve-muted">
                   {displayCardId(card)}
+                  {card.rare ? ` · ${displayRare(card.rare)}` : ''}
                 </p>
               </button>
             ))}
@@ -164,7 +172,7 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
       <Modal
         open={!!selected}
         onClose={() => setSelected(null)}
-        title="添加到库存"
+        title="添加卡牌"
       >
         {selected && (
           <div className="space-y-4">
@@ -177,6 +185,11 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
               <div className="min-w-0 flex-1">
                 <CardTitle card={selected} className="text-lg" />
                 <div className="mt-2 flex flex-wrap gap-1 text-xs">
+                  {selected.rare && (
+                    <span className="badge bg-sve-card text-sve-muted">
+                      {displayRare(selected.rare)}
+                    </span>
+                  )}
                   <span className="badge bg-sve-card text-sve-muted">
                     {CLASS_LABELS[selected.class] ?? selected.class}
                   </span>
@@ -196,26 +209,6 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm text-sve-muted">版本</label>
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(VARIANT_LABELS) as CardVariant[]).map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setVariant(v)}
-                    className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                      variant === v
-                        ? 'border-sve-gold bg-sve-gold/15 text-sve-gold'
-                        : 'border-sve-border bg-sve-card text-sve-muted hover:text-sve-text'
-                    }`}
-                  >
-                    {VARIANT_LABELS[v]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
               <label className="mb-2 block text-sm text-sve-muted">数量</label>
               <QuantityControl value={quantity} onChange={setQuantity} />
             </div>
@@ -223,7 +216,7 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
             {error && <p className="text-sm text-red-400">{error}</p>}
             {success && <p className="text-sm text-green-400">{success}</p>}
 
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 className="btn-secondary"
@@ -233,10 +226,17 @@ export function AddCardPage({ cardSets, onAdded }: AddCardPageProps) {
               </button>
               <button
                 type="button"
-                className="btn-secondary"
+                className="rounded-lg border border-orange-800/60 bg-orange-950/50 px-4 py-2 text-sm font-medium text-orange-300 transition hover:border-orange-700/70 hover:bg-orange-900/45"
                 onClick={() => confirmAdd('forSale')}
               >
                 添加到待售
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-blue-800/60 bg-blue-950/50 px-4 py-2 text-sm font-medium text-blue-300 transition hover:border-blue-700/70 hover:bg-blue-900/45"
+                onClick={() => confirmAdd('cart')}
+              >
+                加入购物车
               </button>
               <button
                 type="button"

@@ -2,9 +2,10 @@ import { ReactNode, useEffect, useState } from 'react';
 import { CraftIcon } from '../components/CraftIcon';
 import {
   CLASS_LABELS,
+  displayRare,
   formatMoney,
+  sortRareValues,
   StatsSummary,
-  VARIANT_LABELS,
 } from '../lib/constants';
 
 interface StatsPageProps {
@@ -115,26 +116,24 @@ export function StatsPage({ refreshKey }: StatsPageProps) {
 
         <section className="panel p-5 lg:col-span-2">
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-sve-gold">
-            按版本分布
+            按稀有度分布
           </h3>
-          {stats.byVariant.length === 0 ? (
+          {stats.byRare.length === 0 ? (
             <EmptyHint />
           ) : (
             <div className="flex flex-wrap gap-4">
-              {stats.byVariant.map((item) => (
-                <div
-                  key={item.variant}
-                  className="rounded-xl border border-sve-border bg-sve-bg px-5 py-4 text-center"
-                >
-                  <p className="text-2xl font-bold text-sve-gold">
-                    {item.count}
-                  </p>
-                  <p className="mt-1 text-sm text-sve-muted">
-                    {VARIANT_LABELS[item.variant as keyof typeof VARIANT_LABELS] ??
-                      item.variant}
-                  </p>
-                </div>
-              ))}
+              {sortRareValues(stats.byRare.map((item) => item.rare)).map((rare) => {
+                const item = stats.byRare.find((r) => r.rare === rare)!;
+                return (
+                  <div
+                    key={item.rare || '__empty'}
+                    className="rounded-xl border border-sve-border bg-sve-bg px-5 py-4 text-center"
+                  >
+                    <p className="text-2xl font-bold text-sve-gold">{item.count}</p>
+                    <p className="mt-1 text-sm text-sve-muted">{displayRare(item.rare)}</p>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

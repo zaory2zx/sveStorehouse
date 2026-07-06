@@ -11,13 +11,15 @@ import {
   CLASS_LABELS,
   ForSaleRow,
   KIND_LABELS,
-  VARIANT_LABELS,
   displayName,
+  displayRare,
+  rareFilterToQuery,
 } from '../lib/constants';
 import { OrderDraftLine, draftToOrderItems } from '../lib/tradeOrder';
 
 interface ForSalePageProps {
   cardSets: string[];
+  cardRares: string[];
   refreshKey: number;
   onChanged: () => void;
 }
@@ -32,6 +34,7 @@ function clampQty(qty: number, max: number) {
 
 export function ForSalePage({
   cardSets,
+  cardRares,
   refreshKey,
   onChanged,
 }: ForSalePageProps) {
@@ -52,7 +55,7 @@ export function ForSalePage({
       cardSet: filters.cardSet || undefined,
       classType: filters.classType || undefined,
       kind: filters.kind || undefined,
-      variant: filters.variant || undefined,
+      rare: rareFilterToQuery(filters.rare),
       cost:
         filters.cost === ''
           ? undefined
@@ -190,7 +193,8 @@ export function ForSalePage({
         values={filters}
         onChange={setFilters}
         cardSets={cardSets}
-        showVariant
+        cardRares={cardRares}
+        showRare
       />
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -248,9 +252,11 @@ export function ForSalePage({
                     </div>
 
                     <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-                      <span className="badge bg-sve-card text-sve-muted">
-                        {VARIANT_LABELS[item.variant]}
-                      </span>
+                      {item.rare && (
+                        <span className="badge bg-sve-card text-sve-muted">
+                          {displayRare(item.rare)}
+                        </span>
+                      )}
                       <span className="badge bg-sve-card text-sve-muted">
                         {CLASS_LABELS[item.class ?? ''] ?? item.class}
                       </span>

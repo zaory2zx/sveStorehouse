@@ -1,4 +1,5 @@
 import { FilterValues } from '../components/FilterBar';
+import { rareFilterToQuery } from './constants';
 
 export const CARD_SEARCH_PAGE_SIZE = 60;
 
@@ -10,6 +11,7 @@ export function buildCardSearchFilters(
   cardSet?: string;
   classType?: string;
   kind?: string;
+  rare?: string;
   cost?: number | null;
   limit: number;
   offset: number;
@@ -19,6 +21,7 @@ export function buildCardSearchFilters(
     cardSet: filters.cardSet || undefined,
     classType: filters.classType || undefined,
     kind: filters.kind || undefined,
+    rare: rareFilterToQuery(filters.rare),
     cost:
       filters.cost === ''
         ? undefined
@@ -35,6 +38,7 @@ export function buildCardCountFilters(filters: FilterValues): {
   cardSet?: string;
   classType?: string;
   kind?: string;
+  rare?: string;
   cost?: number | null;
 } {
   return {
@@ -42,6 +46,7 @@ export function buildCardCountFilters(filters: FilterValues): {
     cardSet: filters.cardSet || undefined,
     classType: filters.classType || undefined,
     kind: filters.kind || undefined,
+    rare: rareFilterToQuery(filters.rare),
     cost:
       filters.cost === ''
         ? undefined

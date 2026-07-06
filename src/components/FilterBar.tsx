@@ -2,7 +2,9 @@ import { Search, X } from 'lucide-react';
 import {
   CardVariant,
   CLASS_LABELS,
+  displayRare,
   KIND_LABELS,
+  rareOptionValue,
   VARIANT_LABELS,
 } from '../lib/constants';
 
@@ -12,6 +14,7 @@ export interface FilterValues {
   classType: string;
   kind: string;
   variant: string;
+  rare: string;
   cost: string;
 }
 
@@ -19,7 +22,9 @@ interface FilterBarProps {
   values: FilterValues;
   onChange: (values: FilterValues) => void;
   cardSets: string[];
+  cardRares?: string[];
   showVariant?: boolean;
+  showRare?: boolean;
   placeholder?: string;
 }
 
@@ -48,7 +53,9 @@ export function FilterBar({
   values,
   onChange,
   cardSets,
+  cardRares = [],
   showVariant = false,
+  showRare = false,
   placeholder = '搜索中文/英文/日文名、卡号、效果…',
 }: FilterBarProps) {
   const set = (key: keyof FilterValues, value: string) =>
@@ -125,6 +132,21 @@ export function FilterBar({
           <option value="-1">X</option>
         </select>
 
+        {showRare && (
+          <select
+            className="select-field"
+            value={values.rare}
+            onChange={(e) => set('rare', e.target.value)}
+          >
+            <option value="">全部稀有度</option>
+            {cardRares.map((r) => (
+              <option key={rareOptionValue(r)} value={rareOptionValue(r)}>
+                {displayRare(r)}
+              </option>
+            ))}
+          </select>
+        )}
+
         {showVariant && (
           <select
             className="select-field"
@@ -151,6 +173,7 @@ export function FilterBar({
                 classType: '',
                 kind: '',
                 variant: '',
+                rare: '',
                 cost: '',
               })
             }
@@ -170,5 +193,6 @@ export const emptyFilters: FilterValues = {
   classType: '',
   kind: '',
   variant: '',
+  rare: '',
   cost: '',
 };

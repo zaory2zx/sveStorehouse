@@ -10,17 +10,19 @@ import {
   CLASS_LABELS,
   CartRow,
   KIND_LABELS,
-  VARIANT_LABELS,
   displayName,
+  displayRare,
+  rareFilterToQuery,
 } from '../lib/constants';
 
 interface CartPageProps {
   cardSets: string[];
+  cardRares: string[];
   refreshKey: number;
   onChanged: () => void;
 }
 
-export function CartPage({ cardSets, refreshKey, onChanged }: CartPageProps) {
+export function CartPage({ cardSets, cardRares, refreshKey, onChanged }: CartPageProps) {
   const [filters, setFilters] = useState<FilterValues>({ ...emptyFilters });
   const [items, setItems] = useState<CartRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ export function CartPage({ cardSets, refreshKey, onChanged }: CartPageProps) {
       cardSet: filters.cardSet || undefined,
       classType: filters.classType || undefined,
       kind: filters.kind || undefined,
-      variant: filters.variant || undefined,
+      rare: rareFilterToQuery(filters.rare),
       cost:
         filters.cost === ''
           ? undefined
@@ -114,7 +116,8 @@ export function CartPage({ cardSets, refreshKey, onChanged }: CartPageProps) {
         values={filters}
         onChange={setFilters}
         cardSets={cardSets}
-        showVariant
+        cardRares={cardRares}
+        showRare
       />
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -125,7 +128,7 @@ export function CartPage({ cardSets, refreshKey, onChanged }: CartPageProps) {
         ) : items.length === 0 ? (
           <div className="panel flex h-40 flex-col items-center justify-center text-sve-muted">
             <p>购物车为空</p>
-            <p className="mt-1 text-xs">前往「加入购物车」添加想买的卡牌</p>
+            <p className="mt-1 text-xs">前往「添加卡牌」加入购入清单</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -156,9 +159,11 @@ export function CartPage({ cardSets, refreshKey, onChanged }: CartPageProps) {
                   </div>
 
                   <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-                    <span className="badge bg-sve-card text-sve-muted">
-                      {VARIANT_LABELS[item.variant]}
-                    </span>
+                    {item.rare && (
+                      <span className="badge bg-sve-card text-sve-muted">
+                        {displayRare(item.rare)}
+                      </span>
+                    )}
                     <span className="badge bg-sve-card text-sve-muted">
                       {CLASS_LABELS[item.class ?? ''] ?? item.class}
                     </span>
@@ -211,8 +216,7 @@ export function CartPage({ cardSets, refreshKey, onChanged }: CartPageProps) {
               <div>
                 <CardTitle card={adjustTarget} />
                 <p className="text-sm text-sve-muted">
-                  {VARIANT_LABELS[adjustTarget.variant]} · 当前{' '}
-                  {adjustTarget.quantity} 张
+                  {displayRare(adjustTarget.rare)} · 当前 {adjustTarget.quantity} 张
                 </p>
               </div>
             </div>

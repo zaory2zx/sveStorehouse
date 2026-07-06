@@ -5,6 +5,7 @@ import path from 'path';
 import {
   buildSearchText,
   mapCraft,
+  normalizeRare,
   toCanonicalId,
 } from './cardUtils.js';
 import { fetchJsonFromUrls } from './fetchUtils.js';
@@ -39,6 +40,7 @@ export interface CardRow {
   description_zh: string;
   description_ja: string;
   search_text: string;
+  rare: string;
   atk: number;
   def: number;
   limited_to_count: number;
@@ -63,6 +65,7 @@ export interface InventoryRow {
   card_set?: string;
   description?: string;
   description_zh?: string;
+  rare?: string;
   for_sale_quantity?: number;
 }
 
@@ -127,6 +130,7 @@ export interface CardFilters {
   cardSet?: string;
   classType?: string;
   kind?: string;
+  rare?: string;
   cost?: number | null;
   locale?: CardLocale | '';
   limit?: number;
@@ -139,6 +143,7 @@ export interface InventoryFilters {
   classType?: string;
   kind?: string;
   variant?: string;
+  rare?: string;
   cost?: number | null;
   locale?: CardLocale | '';
   limit?: number;
@@ -158,6 +163,7 @@ export interface StatsSummary {
   byClass: { class: string; count: number }[];
   bySet: { card_set: string; count: number }[];
   byVariant: { variant: string; count: number }[];
+  byRare: { rare: string; count: number }[];
 }
 
 let db: Database.Database | null = null;
@@ -184,6 +190,7 @@ function migrateSchema(database: Database.Database) {
     ['description_zh', 'TEXT'],
     ['description_ja', 'TEXT'],
     ['search_text', 'TEXT'],
+    ['rare', 'TEXT'],
   ];
 
   for (const [name, def] of additions) {
@@ -210,7 +217,7 @@ function rebuildAllSearchText(database: Database.Database) {
   const rows = database
     .prepare(
       `SELECT card_id, canonical_id, name_en, name_zh, name_ja,
-              description_en, description_zh, description_ja, trait, card_set
+              description_en, description_zh, description_ja, trait, card_set, rare
        FROM cards`,
     )
     .all() as CardRow[];
@@ -232,6 +239,7 @@ function rebuildAllSearchText(database: Database.Database) {
           row.description_ja,
           row.trait,
           row.card_set,
+          row.rare,
         ]),
         row.card_id,
       );
@@ -410,6 +418,31 @@ function migrateToTradeOrders(database: Database.Database) {
   database.pragma('user_version = 4');
 }
 
+function migrateNormalizeRare(database: Database.Database) {
+  const version = database.pragma('user_version', { simple: true }) as number;
+  if (version >= 5) return;
+
+  const rows = database
+    .prepare(
+      `SELECT card_id, rare, kind FROM cards
+       WHERE COALESCE(rare, '') = '' OR rare = '-'`,
+    )
+    .all() as { card_id: string; rare: string; kind: string }[];
+
+  const update = database.prepare('UPDATE cards SET rare = ? WHERE card_id = ?');
+  const tx = database.transaction(() => {
+    for (const row of rows) {
+      const normalized = normalizeRare(row.rare, '', row.kind);
+      if (normalized !== row.rare) {
+        update.run(normalized, row.card_id);
+      }
+    }
+  });
+  tx();
+  rebuildAllSearchText(database);
+  database.pragma('user_version = 5');
+}
+
 function initSchema(database: Database.Database) {
   database.exec(`
     CREATE TABLE IF NOT EXISTS cards (
@@ -432,6 +465,7 @@ function initSchema(database: Database.Database) {
       description_zh TEXT,
       description_ja TEXT,
       search_text TEXT,
+      rare TEXT,
       atk INTEGER,
       def INTEGER,
       limited_to_count INTEGER DEFAULT 3,
@@ -506,6 +540,7 @@ function initSchema(database: Database.Database) {
   migrateToUnifiedCards(database);
   migrateShadowcraftClass(database);
   migrateToTradeOrders(database);
+  migrateNormalizeRare(database);
 
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_cards_name ON cards(name);
@@ -560,12 +595,12 @@ const UPSERT_CARD = `
   INSERT INTO cards (
     card_id, canonical_id, locale, card_set, card_number, kind, class, trait,
     name, name_en, name_zh, name_ja, img_url, cost, description,
-    description_en, description_zh, description_ja, search_text,
+    description_en, description_zh, description_ja, search_text, rare,
     atk, def, limited_to_count, double_sided
   ) VALUES (
     @card_id, @canonical_id, @locale, @card_set, @card_number, @kind, @class, @trait,
     @name, @name_en, @name_zh, @name_ja, @img_url, @cost, @description,
-    @description_en, @description_zh, @description_ja, @search_text,
+    @description_en, @description_zh, @description_ja, @search_text, @rare,
     @atk, @def, @limited_to_count, @double_sided
   )
   ON CONFLICT(card_id) DO UPDATE SET
@@ -587,6 +622,7 @@ const UPSERT_CARD = `
     description_zh = excluded.description_zh,
     description_ja = excluded.description_ja,
     search_text = excluded.search_text,
+    rare = excluded.rare,
     atk = excluded.atk,
     def = excluded.def,
     limited_to_count = excluded.limited_to_count,
@@ -642,6 +678,7 @@ function upsertEnFallbackCards(
           c.trait,
           c.cardSet,
         ]),
+        rare: '',
         atk: c.atk,
         def: c.def,
         limited_to_count: c.limitedToCount ?? 3,
@@ -737,6 +774,10 @@ function buildCardFilterClause(filters: CardFilters): {
     conditions.push('kind = @kind');
     params.kind = filters.kind;
   }
+  if (filters.rare !== undefined) {
+    conditions.push('COALESCE(rare, \'\') = @rare');
+    params.rare = filters.rare;
+  }
   if (filters.cost !== undefined && filters.cost !== null) {
     conditions.push('cost = @cost');
     params.cost = filters.cost;
@@ -782,6 +823,41 @@ export function getCardSets(): string[] {
   ).map((r) => r.card_set);
 }
 
+const RARE_SORT_ORDER = [
+  'BR',
+  'SR',
+  'GR',
+  'LG',
+  'LD',
+  'BR_P',
+  'SR_P',
+  'GR_P',
+  'SL',
+  'UR',
+  'SP',
+  'PR',
+  'SSP',
+  'TK',
+  '-',
+  '',
+];
+
+export function getCardRares(): string[] {
+  const database = getDatabase();
+  const rows = database
+    .prepare(
+      `SELECT DISTINCT COALESCE(rare, '') as rare FROM cards ORDER BY rare`,
+    )
+    .all() as { rare: string }[];
+  const order = new Map(RARE_SORT_ORDER.map((v, i) => [v, i]));
+  return rows
+    .map((r) => r.rare)
+    .sort(
+      (a, b) =>
+        (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b),
+    );
+}
+
 export function getInventory(filters: InventoryFilters = {}): InventoryRow[] {
   const database = getDatabase();
   const { where, params } = buildCardListFilterConditions('i', filters);
@@ -792,7 +868,8 @@ export function getInventory(filters: InventoryFilters = {}): InventoryRow[] {
     .prepare(
       `SELECT i.*, COALESCE(fs.quantity, 0) as for_sale_quantity,
               c.name, c.name_zh, c.name_en, c.locale, c.class, c.kind, c.cost,
-              c.atk, c.def, c.img_url, c.card_set, c.description, c.description_zh
+              c.atk, c.def, c.img_url, c.card_set, c.description, c.description_zh,
+              c.rare
        FROM inventory i
        JOIN cards c ON c.card_id = i.card_id
        LEFT JOIN for_sale fs ON fs.card_id = i.card_id AND fs.variant = i.variant
@@ -838,6 +915,10 @@ function buildCardListFilterConditions(
     conditions.push(`${alias}.variant = @variant`);
     params.variant = filters.variant;
   }
+  if (filters.rare !== undefined) {
+    conditions.push(`COALESCE(c.rare, '') = @rare`);
+    params.rare = filters.rare;
+  }
   if (filters.cost !== undefined && filters.cost !== null) {
     conditions.push('c.cost = @cost');
     params.cost = filters.cost;
@@ -860,7 +941,8 @@ function queryCardList(
     .prepare(
       `SELECT ${alias}.*,
               c.name, c.name_zh, c.name_en, c.locale, c.class, c.kind, c.cost,
-              c.atk, c.def, c.img_url, c.card_set, c.description, c.description_zh
+              c.atk, c.def, c.img_url, c.card_set, c.description, c.description_zh,
+              c.rare
        FROM ${table} ${alias}
        JOIN cards c ON c.card_id = ${alias}.card_id
        ${where}
@@ -1322,12 +1404,22 @@ export function getStats(): StatsSummary {
     )
     .all() as { variant: string; count: number }[];
 
+  const byRare = database
+    .prepare(
+      `SELECT COALESCE(c.rare, '') as rare, SUM(i.quantity) as count
+       FROM inventory i JOIN cards c ON c.card_id = i.card_id
+       WHERE i.quantity > 0
+       GROUP BY COALESCE(c.rare, '') ORDER BY count DESC`,
+    )
+    .all() as { rare: string; count: number }[];
+
   return {
     totalCards: totals.totalCards,
     uniqueCards: totals.uniqueCards,
     byClass,
     bySet,
     byVariant,
+    byRare,
   };
 }
 

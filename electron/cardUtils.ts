@@ -61,7 +61,29 @@ export function mapKind(cardType: string): string {
   if (cardType.includes('Evolved') || cardType === 'FollowerEvolved') {
     return 'FollowerEvolved';
   }
+  if (cardType === 'Other') return 'Token';
   return TYPE_MAP[cardType] ?? cardType;
+}
+
+/** SVE-helper 中 rare 为 '-' 或空时，按卡牌类型归一化 */
+export function normalizeRare(
+  rawRare: string | null | undefined,
+  cardType: string,
+  kind: string,
+): string {
+  const raw = rawRare ?? '';
+  if (raw && raw !== '-') return raw;
+
+  if (
+    kind === 'Token' ||
+    kind === 'Other' ||
+    /Token$/i.test(cardType) ||
+    cardType === 'Other'
+  ) {
+    return 'TK';
+  }
+  if (kind === 'Leader') return 'LD';
+  return raw;
 }
 
 export function inferScImageUrl(cardNo: string, fromSet: string): string {

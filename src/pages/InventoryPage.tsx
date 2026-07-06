@@ -10,12 +10,14 @@ import {
   CLASS_LABELS,
   InventoryRow,
   KIND_LABELS,
-  VARIANT_LABELS,
   displayName,
+  displayRare,
+  rareFilterToQuery,
 } from '../lib/constants';
 
 interface InventoryPageProps {
   cardSets: string[];
+  cardRares: string[];
   refreshKey: number;
   onChanged: () => void;
 }
@@ -31,6 +33,7 @@ function clampQty(qty: number, max: number) {
 
 export function InventoryPage({
   cardSets,
+  cardRares,
   refreshKey,
   onChanged,
 }: InventoryPageProps) {
@@ -49,7 +52,7 @@ export function InventoryPage({
       cardSet: filters.cardSet || undefined,
       classType: filters.classType || undefined,
       kind: filters.kind || undefined,
-      variant: filters.variant || undefined,
+      rare: rareFilterToQuery(filters.rare),
       cost:
         filters.cost === ''
           ? undefined
@@ -163,7 +166,8 @@ export function InventoryPage({
         values={filters}
         onChange={setFilters}
         cardSets={cardSets}
-        showVariant
+        cardRares={cardRares}
+        showRare
       />
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -217,9 +221,11 @@ export function InventoryPage({
                     )}
 
                     <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-                      <span className="badge bg-sve-card text-sve-muted">
-                        {VARIANT_LABELS[item.variant]}
-                      </span>
+                      {item.rare && (
+                        <span className="badge bg-sve-card text-sve-muted">
+                          {displayRare(item.rare)}
+                        </span>
+                      )}
                       <span className="badge bg-sve-card text-sve-muted">
                         {CLASS_LABELS[item.class ?? ''] ?? item.class}
                       </span>
@@ -306,8 +312,7 @@ export function InventoryPage({
               <div>
                 <CardTitle card={adjustTarget} />
                 <p className="text-sm text-sve-muted">
-                  {VARIANT_LABELS[adjustTarget.variant]} · 当前{' '}
-                  {adjustTarget.quantity} 张
+                  {displayRare(adjustTarget.rare)} · 当前 {adjustTarget.quantity} 张
                 </p>
               </div>
             </div>

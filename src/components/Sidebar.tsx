@@ -4,7 +4,6 @@ import {
   PlusCircle,
   RefreshCw,
   ScrollText,
-  ShoppingBag,
   ShoppingCart,
   Tag,
 } from 'lucide-react';
@@ -23,7 +22,6 @@ const NAV: { id: Page; label: string; icon: typeof Package }[] = [
   { id: 'forSale', label: '待售', icon: Tag },
   { id: 'add', label: '添加卡牌', icon: PlusCircle },
   { id: 'cart', label: '购物车', icon: ShoppingCart },
-  { id: 'addCart', label: '加入购物车', icon: ShoppingBag },
   { id: 'trades', label: '交易记录', icon: ScrollText },
   { id: 'stats', label: '库存统计', icon: BarChart3 },
 ];

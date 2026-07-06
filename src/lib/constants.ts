@@ -1,7 +1,7 @@
 export type CardVariant = 'normal' | 'premium' | 'alt_art' | 'pr';
 export type CardLocale = 'en' | 'sc';
 export type TradeType = 'buy' | 'sell' | 'exchange';
-export type Page = 'inventory' | 'forSale' | 'add' | 'cart' | 'addCart' | 'trades' | 'stats';
+export type Page = 'inventory' | 'forSale' | 'add' | 'cart' | 'trades' | 'stats';
 
 export interface CardRow {
   card_id: string;
@@ -23,6 +23,7 @@ export interface CardRow {
   description_zh: string;
   description_ja: string;
   search_text: string;
+  rare: string;
   atk: number;
   def: number;
   limited_to_count: number;
@@ -47,6 +48,7 @@ export interface InventoryRow {
   card_set?: string;
   description?: string;
   description_zh?: string;
+  rare?: string;
   for_sale_quantity?: number;
 }
 
@@ -83,6 +85,80 @@ export interface StatsSummary {
   byClass: { class: string; count: number }[];
   bySet: { card_set: string; count: number }[];
   byVariant: { variant: string; count: number }[];
+  byRare: { rare: string; count: number }[];
+}
+
+export const RARE_LABELS: Record<string, string> = {
+  BR: 'BR',
+  SR: 'SR',
+  GR: 'GR',
+  LG: 'LG',
+  BR_P: 'BR闪',
+  SR_P: 'SR闪',
+  GR_P: 'GR闪',
+  SL: 'SL',
+  UR: 'UR',
+  SP: 'SP',
+  PR: 'PR',
+  SSP: 'SSP',
+  TK: '衍生物',
+  LD: '主战者',
+  '-': '特殊',
+  '': '未标注',
+};
+
+/** 下拉框中代表「空 rare」的占位值，避免与「全部稀有度」冲突 */
+export const EMPTY_RARE_FILTER = '__EMPTY_RARE__';
+
+/** 稀有度筛选/排序优先级 */
+export const RARE_ORDER = [
+  'BR',
+  'SR',
+  'GR',
+  'LG',
+  'LD',
+  'BR_P',
+  'SR_P',
+  'GR_P',
+  'SL',
+  'UR',
+  'SP',
+  'PR',
+  'SSP',
+  'TK',
+  '-',
+  '',
+] as const;
+
+export function displayRare(rare: string | null | undefined): string {
+  if (rare === undefined || rare === null) return RARE_LABELS[''] ?? '未标注';
+  if (rare === '') return RARE_LABELS[''] ?? '未标注';
+  if (RARE_LABELS[rare]) return RARE_LABELS[rare];
+  const premiumMatch = rare.match(/^(.+)_P$/);
+  if (premiumMatch) {
+    const base = displayRare(premiumMatch[1]);
+    return `${base}闪`;
+  }
+  return rare;
+}
+
+export function rareFilterToQuery(value: string): string | undefined {
+  if (value === '') return undefined;
+  if (value === EMPTY_RARE_FILTER) return '';
+  return value;
+}
+
+export function rareOptionValue(rare: string): string {
+  return rare === '' ? EMPTY_RARE_FILTER : rare;
+}
+
+export function sortRareValues(values: string[]): string[] {
+  const order = new Map<string, number>(
+    RARE_ORDER.map((v, i) => [v, i]),
+  );
+  return [...values].sort(
+    (a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b),
+  );
 }
 
 export const VARIANT_LABELS: Record<CardVariant, string> = {
