@@ -9,8 +9,10 @@ import {
   createOrder,
   deleteOrder,
   getCardCount,
+  getCardQuantities,
   getCardRares,
   getCardSets,
+  getPersistedSyncError,
   getCart,
   getDatabase,
   getForSale,
@@ -35,7 +37,7 @@ import {
   type InventoryFilters,
   type SellFromForSaleInput,
 } from './db.js';
-import { fetchImageAsDataUrl, saveImageFromDataUrl } from './exportImage.js';
+import { fetchImageAsDataUrl, copyImageFromDataUrl, saveImageFromDataUrl } from './exportImage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -91,6 +93,9 @@ function registerIpc() {
   );
   ipcMain.handle('db:getInventory', (_e, filters: InventoryFilters) =>
     getInventory(filters),
+  );
+  ipcMain.handle('db:getCardQuantities', (_e, cardId: string) =>
+    getCardQuantities(cardId),
   );
   ipcMain.handle(
     'db:addInventory',
@@ -158,6 +163,9 @@ function registerIpc() {
   ipcMain.handle('export:saveImage', (_e, dataUrl: string, defaultName: string) =>
     saveImageFromDataUrl(dataUrl, defaultName),
   );
+  ipcMain.handle('export:copyImage', (_e, dataUrl: string) => {
+    copyImageFromDataUrl(dataUrl);
+  });
 }
 
 app.whenReady().then(() => {

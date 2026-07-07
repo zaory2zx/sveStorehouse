@@ -29,7 +29,10 @@ export function CartPage({ cardSets, cardRares, refreshKey, onChanged }: CartPag
   const [adjustTarget, setAdjustTarget] = useState<CartRow | null>(null);
   const [adjustQty, setAdjustQty] = useState(1);
   const [adjustMode, setAdjustMode] = useState<'add' | 'remove'>('add');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
+
+  const itemKey = (item: CartRow) => `${item.card_id}-${item.variant}`;
 
   const queryFilters = useMemo(
     () => ({
@@ -53,6 +56,10 @@ export function CartPage({ cardSets, cardRares, refreshKey, onChanged }: CartPag
     try {
       const data = await window.sveApi.getCart(queryFilters);
       setItems(data);
+      setSelected((prev) => {
+        const valid = new Set(data.map(itemKey));
+        return new Set([...prev].filter((key) => valid.has(key)));
+      });
     } finally {
       setLoading(false);
     }
@@ -68,6 +75,31 @@ export function CartPage({ cardSets, cardRares, refreshKey, onChanged }: CartPag
     setAdjustMode(mode);
     setAdjustQty(1);
     setError('');
+  };
+
+  const toggleSelect = (item: CartRow) => {
+    const key = itemKey(item);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === items.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(items.map(itemKey)));
+    }
+  };
+
+  const getExportItems = () => {
+    if (selected.size > 0) {
+      return items.filter((item) => selected.has(itemKey(item)));
+    }
+    return items;
   };
 
   const confirmAdjust = async () => {
@@ -108,7 +140,7 @@ export function CartPage({ cardSets, cardRares, refreshKey, onChanged }: CartPag
           title="购物车"
           filenamePrefix="SVE购物车"
           disabled={loading}
-          loadItems={() => window.sveApi.getCart({ limit: 10000 })}
+          loadItems={async () => getExportItems()}
         />
       </header>
 
@@ -119,6 +151,21 @@ export function CartPage({ cardSets, cardRares, refreshKey, onChanged }: CartPag
         cardRares={cardRares}
         showRare
       />
+
+      {!loading && items.length > 0 && (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="btn-secondary text-sm"
+            onClick={toggleSelectAll}
+          >
+            {selected.size === items.length ? '取消全选' : '全选'}
+          </button>
+          {selected.size > 0 && (
+            <span className="text-sm text-sve-muted">已选 {selected.size} 项</span>
+          )}
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto">
         {loading ? (
@@ -132,16 +179,32 @@ export function CartPage({ cardSets, cardRares, refreshKey, onChanged }: CartPag
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {items.map((item) => (
-              <div
-                key={`${item.card_id}-${item.variant}`}
-                className="panel flex gap-4 p-4 transition hover:border-sve-gold/20"
-              >
-                <CardImage
-                  src={item.img_url}
-                  alt={item.name ?? item.card_id}
-                  className="h-28 w-20 shrink-0"
-                />
+            {items.map((item) => {
+              const key = itemKey(item);
+              const isSelected = selected.has(key);
+
+              return (
+                <div
+                  key={key}
+                  className={`panel flex gap-4 p-4 transition ${
+                    isSelected
+                      ? 'border-sve-gold/40 shadow-glow'
+                      : 'hover:border-sve-gold/20'
+                  }`}
+                >
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-2 accent-sve-gold"
+                      checked={isSelected}
+                      onChange={() => toggleSelect(item)}
+                    />
+                    <CardImage
+                      src={item.img_url}
+                      alt={item.name ?? item.card_id}
+                      className="h-28 w-20 shrink-0"
+                    />
+                  </label>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -195,7 +258,8 @@ export function CartPage({ cardSets, cardRares, refreshKey, onChanged }: CartPag
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

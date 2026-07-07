@@ -37,6 +37,21 @@ const COLORS = {
   badge: '#1a1710',
 };
 
+/** 浏览器 canvas 单边像素上限 */
+const MAX_CANVAS_DIMENSION = 16384;
+
+function pickExportScale(width: number, height: number, cardW: number): number {
+  // 卡图越小，基础倍率越高，避免大量卡牌时文字和卡图发糊
+  let scale = cardW <= 88 ? 3 : cardW <= 120 ? 2 : 2;
+  while (
+    scale > 1 &&
+    (width * scale > MAX_CANVAS_DIMENSION || height * scale > MAX_CANVAS_DIMENSION)
+  ) {
+    scale -= 1;
+  }
+  return scale;
+}
+
 function pickLayout(count: number): Layout {
   if (count <= 30) {
     return { cols: 6, cardW: 140, cardH: 196, gap: 16, padding: 32, headerH: 80, labelH: 52 };
@@ -135,12 +150,17 @@ export async function renderCardListImage(options: {
   const gridH = rows * (cardH + labelH + gap) - gap;
   const width = padding * 2 + gridW;
   const height = padding * 2 + headerH + gridH + 28;
+  const scale = pickExportScale(width, height, cardW);
 
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('无法创建画布');
+
+  ctx.scale(scale, scale);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   ctx.fillStyle = COLORS.bg;
   ctx.fillRect(0, 0, width, height);

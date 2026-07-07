@@ -1,4 +1,4 @@
-import { dialog } from 'electron';
+import { clipboard, dialog, nativeImage } from 'electron';
 import fs from 'fs';
 import path from 'path';
 
@@ -34,4 +34,12 @@ export async function saveImageFromDataUrl(
   const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
   fs.writeFileSync(path.normalize(filePath), Buffer.from(base64, 'base64'));
   return { saved: true, filePath };
+}
+
+export function copyImageFromDataUrl(dataUrl: string): void {
+  const image = nativeImage.createFromDataURL(dataUrl);
+  if (image.isEmpty()) {
+    throw new Error('图片数据无效');
+  }
+  clipboard.writeImage(image);
 }

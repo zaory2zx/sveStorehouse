@@ -7,6 +7,7 @@ import { Pagination } from '../components/Pagination';
 import { QuantityControl } from '../components/QuantityControl';
 import { CardTitle } from '../components/CardTitle';
 import {
+  CardQuantities,
   CardRow,
   CLASS_LABELS,
   KIND_LABELS,
@@ -34,6 +35,8 @@ export function AddCardPage({ cardSets, cardRares, onAdded }: AddCardPageProps) 
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<CardRow | null>(null);
+  const [quantities, setQuantities] = useState<CardQuantities | null>(null);
+  const [quantitiesLoading, setQuantitiesLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -75,11 +78,25 @@ export function AddCardPage({ cardSets, cardRares, onAdded }: AddCardPageProps) 
     listRef.current?.scrollTo({ top: 0 });
   };
 
+  const loadQuantities = useCallback(async (cardId: string) => {
+    setQuantitiesLoading(true);
+    try {
+      const data = await window.sveApi.getCardQuantities(cardId);
+      setQuantities(data);
+    } catch {
+      setQuantities(null);
+    } finally {
+      setQuantitiesLoading(false);
+    }
+  }, []);
+
   const openAdd = (card: CardRow) => {
     setSelected(card);
     setQuantity(1);
+    setQuantities(null);
     setError('');
     setSuccess('');
+    void loadQuantities(card.card_id);
   };
 
   const confirmAdd = async (target: 'inventory' | 'forSale' | 'cart') => {
@@ -97,6 +114,7 @@ export function AddCardPage({ cardSets, cardRares, onAdded }: AddCardPageProps) 
         setSuccess(`已加入购物车 ${displayName(selected)} ×${quantity}`);
       }
       onAdded();
+      await loadQuantities(selected.card_id);
       setTimeout(() => {
         setSelected(null);
         setSuccess('');
@@ -208,8 +226,32 @@ export function AddCardPage({ cardSets, cardRares, onAdded }: AddCardPageProps) 
               </div>
             </div>
 
+            <div className="rounded-lg border border-sve-border/60 bg-sve-card/40 p-3">
+              <p className="mb-2 text-xs text-sve-muted">当前持有（含全部异画/闪卡）</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-xs text-sve-muted">库存</p>
+                  <p className="mt-0.5 text-lg font-semibold text-sve-text">
+                    {quantitiesLoading ? '…' : (quantities?.inventory ?? 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-orange-300/80">待售</p>
+                  <p className="mt-0.5 text-lg font-semibold text-orange-300">
+                    {quantitiesLoading ? '…' : (quantities?.forSale ?? 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-300/80">购物车</p>
+                  <p className="mt-0.5 text-lg font-semibold text-blue-300">
+                    {quantitiesLoading ? '…' : (quantities?.cart ?? 0)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div>
-              <label className="mb-2 block text-sm text-sve-muted">数量</label>
+              <label className="mb-2 block text-sm text-sve-muted">添加数量</label>
               <QuantityControl value={quantity} onChange={setQuantity} />
             </div>
 

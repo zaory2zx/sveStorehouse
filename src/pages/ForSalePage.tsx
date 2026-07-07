@@ -103,6 +103,21 @@ export function ForSalePage({
     });
   };
 
+  const toggleSelectAll = () => {
+    if (selected.size === items.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(items.map(lineKey)));
+    }
+  };
+
+  const getExportItems = () => {
+    if (selected.size > 0) {
+      return items.filter((item) => selected.has(lineKey(item)));
+    }
+    return items;
+  };
+
   const getSellQty = (item: ForSaleRow) =>
     clampQty(sellQty[lineKey(item)] ?? 1, item.quantity);
 
@@ -184,7 +199,7 @@ export function ForSalePage({
             title="待售清单"
             filenamePrefix="SVE待售"
             disabled={loading}
-            loadItems={() => window.sveApi.getForSale({ limit: 10000 })}
+            loadItems={async () => getExportItems()}
           />
         </div>
       </header>
@@ -196,6 +211,21 @@ export function ForSalePage({
         cardRares={cardRares}
         showRare
       />
+
+      {!loading && items.length > 0 && (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="btn-secondary text-sm"
+            onClick={toggleSelectAll}
+          >
+            {selected.size === items.length ? '取消全选' : '全选'}
+          </button>
+          {selectedCount > 0 && (
+            <span className="text-sm text-sve-muted">已选 {selectedCount} 项</span>
+          )}
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto">
         {loading ? (

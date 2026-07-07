@@ -44,6 +44,7 @@ export function InventoryPage({
   const [adjustQty, setAdjustQty] = useState(1);
   const [adjustMode, setAdjustMode] = useState<'add' | 'remove'>('add');
   const [actionQty, setActionQty] = useState<Record<string, number>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
 
   const queryFilters = useMemo(
@@ -68,6 +69,10 @@ export function InventoryPage({
     try {
       const data = await window.sveApi.getInventory(queryFilters);
       setItems(data);
+      setSelected((prev) => {
+        const valid = new Set(data.map(itemKey));
+        return new Set([...prev].filter((key) => valid.has(key)));
+      });
     } finally {
       setLoading(false);
     }
@@ -133,6 +138,31 @@ export function InventoryPage({
     }
   };
 
+  const toggleSelect = (item: InventoryRow) => {
+    const key = itemKey(item);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === items.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(items.map(itemKey)));
+    }
+  };
+
+  const getExportItems = () => {
+    if (selected.size > 0) {
+      return items.filter((item) => selected.has(itemKey(item)));
+    }
+    return items;
+  };
+
   const handleUnmarkForSale = async (item: InventoryRow) => {
     const max = item.for_sale_quantity ?? 0;
     const qty = getActionQty(item, max);
@@ -158,7 +188,7 @@ export function InventoryPage({
           title="我的库存"
           filenamePrefix="SVE库存"
           disabled={loading}
-          loadItems={() => window.sveApi.getInventory({ limit: 10000 })}
+          loadItems={async () => getExportItems()}
         />
       </header>
 
@@ -169,6 +199,21 @@ export function InventoryPage({
         cardRares={cardRares}
         showRare
       />
+
+      {!loading && items.length > 0 && (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="btn-secondary text-sm"
+            onClick={toggleSelectAll}
+          >
+            {selected.size === items.length ? '取消全选' : '全选'}
+          </button>
+          {selected.size > 0 && (
+            <span className="text-sm text-sve-muted">已选 {selected.size} 项</span>
+          )}
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto">
         {loading ? (
@@ -184,6 +229,7 @@ export function InventoryPage({
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {items.map((item) => {
               const key = itemKey(item);
+              const isSelected = selected.has(key);
               const markMax = availableForSale(item);
               const unmarkMax = item.for_sale_quantity ?? 0;
               const actionMax = Math.max(markMax, unmarkMax);
@@ -191,13 +237,25 @@ export function InventoryPage({
               return (
                 <div
                   key={key}
-                  className="panel flex gap-4 p-4 transition hover:border-sve-gold/20"
+                  className={`panel flex gap-4 p-4 transition ${
+                    isSelected
+                      ? 'border-sve-gold/40 shadow-glow'
+                      : 'hover:border-sve-gold/20'
+                  }`}
                 >
-                  <CardImage
-                    src={item.img_url}
-                    alt={item.name ?? item.card_id}
-                    className="h-28 w-20 shrink-0"
-                  />
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-2 accent-sve-gold"
+                      checked={isSelected}
+                      onChange={() => toggleSelect(item)}
+                    />
+                    <CardImage
+                      src={item.img_url}
+                      alt={item.name ?? item.card_id}
+                      className="h-28 w-20 shrink-0"
+                    />
+                  </label>
                   <div className="flex min-h-28 min-w-0 flex-1 flex-col">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">

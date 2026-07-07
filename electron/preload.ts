@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   CardFilters,
+  CardQuantities,
   CardRow,
   CardVariant,
   CartFilters,
@@ -25,6 +26,7 @@ export interface SveApi {
   searchCards: (filters: CardFilters) => Promise<CardRow[]>;
   countSearchCards: (filters: CardFilters) => Promise<number>;
   getInventory: (filters: InventoryFilters) => Promise<InventoryRow[]>;
+  getCardQuantities: (cardId: string) => Promise<CardQuantities>;
   addInventory: (
     cardId: string,
     variant: CardVariant,
@@ -82,6 +84,7 @@ export interface SveApi {
     dataUrl: string,
     defaultName: string,
   ) => Promise<{ saved: boolean; filePath?: string }>;
+  copyImage: (dataUrl: string) => Promise<void>;
 }
 
 const api: SveApi = {
@@ -94,6 +97,8 @@ const api: SveApi = {
   countSearchCards: (filters) =>
     ipcRenderer.invoke('db:countSearchCards', filters),
   getInventory: (filters) => ipcRenderer.invoke('db:getInventory', filters),
+  getCardQuantities: (cardId) =>
+    ipcRenderer.invoke('db:getCardQuantities', cardId),
   addInventory: (cardId, variant, quantity) =>
     ipcRenderer.invoke('db:addInventory', cardId, variant, quantity),
   addToForSale: (cardId, variant, quantity) =>
@@ -124,11 +129,13 @@ const api: SveApi = {
   fetchImageDataUrl: (url) => ipcRenderer.invoke('export:fetchImage', url),
   saveImage: (dataUrl, defaultName) =>
     ipcRenderer.invoke('export:saveImage', dataUrl, defaultName),
+  copyImage: (dataUrl) => ipcRenderer.invoke('export:copyImage', dataUrl),
 };
 
 contextBridge.exposeInMainWorld('sveApi', api);
 
 export type {
+  CardQuantities,
   CardRow,
   InventoryRow,
   CartRow,

@@ -79,6 +79,12 @@ export interface TradeOrderRow {
   items: TradeItemRow[];
 }
 
+export interface CardQuantities {
+  inventory: number;
+  forSale: number;
+  cart: number;
+}
+
 export interface StatsSummary {
   totalCards: number;
   uniqueCards: number;

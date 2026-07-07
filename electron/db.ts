@@ -150,6 +150,12 @@ export interface InventoryFilters {
   offset?: number;
 }
 
+export interface CardQuantities {
+  inventory: number;
+  forSale: number;
+  cart: number;
+}
+
 export interface SyncResult {
   count: number;
   total: number;
@@ -167,6 +173,32 @@ export interface StatsSummary {
 }
 
 let db: Database.Database | null = null;
+
+const SYNC_ERROR_META_KEY = 'zh_sync_error';
+
+function setPersistedSyncError(error: string | null) {
+  const database = getDatabase();
+  if (error) {
+    database
+      .prepare(
+        `INSERT INTO app_meta (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(SYNC_ERROR_META_KEY, error);
+  } else {
+    database
+      .prepare('DELETE FROM app_meta WHERE key = ?')
+      .run(SYNC_ERROR_META_KEY);
+  }
+}
+
+export function getPersistedSyncError(): string | null {
+  const database = getDatabase();
+  const row = database
+    .prepare('SELECT value FROM app_meta WHERE key = ?')
+    .get(SYNC_ERROR_META_KEY) as { value: string } | undefined;
+  return row?.value ?? null;
+}
 
 function getDbPath(): string {
   const dir = path.join(app.getPath('userData'), 'sve-inventory');
@@ -886,6 +918,26 @@ export function getCart(filters: CartFilters = {}): CartRow[] {
 
 export function getForSale(filters: ForSaleFilters = {}): ForSaleRow[] {
   return queryCardList('for_sale', filters);
+}
+
+export function getCardQuantities(cardId: string): CardQuantities {
+  const database = getDatabase();
+  const resolvedId = resolveCardId(cardId);
+
+  const sumTable = (table: 'inventory' | 'for_sale' | 'cart') => {
+    const row = database
+      .prepare(
+        `SELECT COALESCE(SUM(quantity), 0) as total FROM ${table} WHERE card_id = ?`,
+      )
+      .get(resolvedId) as { total: number };
+    return row.total;
+  };
+
+  return {
+    inventory: sumTable('inventory'),
+    forSale: sumTable('for_sale'),
+    cart: sumTable('cart'),
+  };
 }
 
 function buildCardListFilterConditions(

@@ -46,7 +46,7 @@
       "dist-electron/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": "zip"
     }
   }
 }
