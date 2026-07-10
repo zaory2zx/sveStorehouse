@@ -12,7 +12,6 @@ import {
   getCardQuantities,
   getCardRares,
   getCardSets,
-  getPersistedSyncError,
   getCart,
   getDatabase,
   getForSale,
@@ -37,7 +36,16 @@ import {
   type InventoryFilters,
   type SellFromForSaleInput,
 } from './db.js';
+import { exportUserDataToFile, importUserDataFromFile } from './backupFile.js';
 import { fetchImageAsDataUrl, copyImageFromDataUrl, saveImageFromDataUrl } from './exportImage.js';
+import {
+  getOneDriveStatus,
+  loginOneDrive,
+  logoutOneDrive,
+  syncOneDrive,
+  type OneDriveDeviceCodeInfo,
+} from './onedriveSync.js';
+import { getLocalUserDataMeta } from './userDataSync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -166,6 +174,26 @@ function registerIpc() {
   ipcMain.handle('export:copyImage', (_e, dataUrl: string) => {
     copyImageFromDataUrl(dataUrl);
   });
+
+  ipcMain.handle('data:exportToFile', () => exportUserDataToFile());
+  ipcMain.handle('data:importFromFile', () => importUserDataFromFile());
+  ipcMain.handle('data:getLocalMeta', () => getLocalUserDataMeta());
+
+  const sendDeviceCode = (
+    event: { sender: { send: (channel: string, info: OneDriveDeviceCodeInfo) => void } },
+    info: OneDriveDeviceCodeInfo,
+  ) => {
+    event.sender.send('onedrive:deviceCode', info);
+  };
+
+  ipcMain.handle('onedrive:getStatus', () => getOneDriveStatus());
+  ipcMain.handle('onedrive:login', (event) =>
+    loginOneDrive((info) => sendDeviceCode(event, info)),
+  );
+  ipcMain.handle('onedrive:logout', () => logoutOneDrive());
+  ipcMain.handle('onedrive:sync', (event, force?: 'upload' | 'download') =>
+    syncOneDrive(force, (info) => sendDeviceCode(event, info)),
+  );
 }
 
 app.whenReady().then(() => {

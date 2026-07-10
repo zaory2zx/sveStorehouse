@@ -154,6 +154,16 @@ export function rareFilterToQuery(value: string): string | undefined {
   return value;
 }
 
+export function rareFiltersToQuery(
+  values: string[],
+): string | string[] | undefined {
+  if (values.length === 0) return undefined;
+  const mapped = values.map((v) =>
+    v === EMPTY_RARE_FILTER ? '' : v,
+  );
+  return mapped.length === 1 ? mapped[0] : mapped;
+}
+
 export function rareOptionValue(rare: string): string {
   return rare === '' ? EMPTY_RARE_FILTER : rare;
 }

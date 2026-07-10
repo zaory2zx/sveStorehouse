@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type {
   CardFilters,
   CardQuantities,
@@ -85,6 +85,54 @@ export interface SveApi {
     defaultName: string,
   ) => Promise<{ saved: boolean; filePath?: string }>;
   copyImage: (dataUrl: string) => Promise<void>;
+  exportUserData: () => Promise<{
+    saved: boolean;
+    filePath?: string;
+    meta?: {
+      updated_at: string;
+      device: string;
+      inventoryCount: number;
+      tradeOrderCount: number;
+    };
+  }>;
+  importUserData: () => Promise<{
+    imported: boolean;
+    filePath?: string;
+    meta?: {
+      updated_at: string;
+      device: string;
+      inventoryCount: number;
+      tradeOrderCount: number;
+    };
+  }>;
+  getOneDriveStatus: () => Promise<{
+    configured: boolean;
+    connected: boolean;
+    accountName: string | null;
+    lastSyncAt: string | null;
+    lastAction: 'upload' | 'download' | 'none' | null;
+  }>;
+  loginOneDrive: () => Promise<{ accountName: string | null }>;
+  logoutOneDrive: () => Promise<void>;
+  syncOneDrive: (
+    force?: 'upload' | 'download',
+  ) => Promise<{
+    action: 'upload' | 'download' | 'none';
+    message: string;
+    meta?: {
+      updated_at: string;
+      device: string;
+      inventoryCount: number;
+      tradeOrderCount: number;
+    };
+  }>;
+  onOneDriveDeviceCode: (
+    callback: (info: {
+      message: string;
+      userCode: string;
+      verificationUri: string;
+    }) => void,
+  ) => () => void;
 }
 
 const api: SveApi = {
@@ -130,6 +178,21 @@ const api: SveApi = {
   saveImage: (dataUrl, defaultName) =>
     ipcRenderer.invoke('export:saveImage', dataUrl, defaultName),
   copyImage: (dataUrl) => ipcRenderer.invoke('export:copyImage', dataUrl),
+  exportUserData: () => ipcRenderer.invoke('data:exportToFile'),
+  importUserData: () => ipcRenderer.invoke('data:importFromFile'),
+  getOneDriveStatus: () => ipcRenderer.invoke('onedrive:getStatus'),
+  loginOneDrive: () => ipcRenderer.invoke('onedrive:login'),
+  logoutOneDrive: () => ipcRenderer.invoke('onedrive:logout'),
+  syncOneDrive: (force) => ipcRenderer.invoke('onedrive:sync', force),
+  onOneDriveDeviceCode: (callback) => {
+    const handler = (_event: IpcRendererEvent, info: {
+      message: string;
+      userCode: string;
+      verificationUri: string;
+    }) => callback(info);
+    ipcRenderer.on('onedrive:deviceCode', handler);
+    return () => ipcRenderer.removeListener('onedrive:deviceCode', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('sveApi', api);

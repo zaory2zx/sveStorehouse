@@ -3,6 +3,7 @@ dist/
 dist-electron/
 release/
 *.db
+electron/onedrive.config.json
 .DS_Store
 *.log
 tsconfig.tsbuildinfo

@@ -127,11 +127,11 @@ export interface TradeOrderRow {
 
 export interface CardFilters {
   query?: string;
-  cardSet?: string;
-  classType?: string;
-  kind?: string;
-  rare?: string;
-  cost?: number | null;
+  cardSet?: string | string[];
+  classType?: string | string[];
+  kind?: string | string[];
+  rare?: string | string[];
+  cost?: number | number[] | null;
   locale?: CardLocale | '';
   limit?: number;
   offset?: number;
@@ -139,12 +139,12 @@ export interface CardFilters {
 
 export interface InventoryFilters {
   query?: string;
-  cardSet?: string;
-  classType?: string;
-  kind?: string;
-  variant?: string;
-  rare?: string;
-  cost?: number | null;
+  cardSet?: string | string[];
+  classType?: string | string[];
+  kind?: string | string[];
+  variant?: string | string[];
+  rare?: string | string[];
+  cost?: number | number[] | null;
   locale?: CardLocale | '';
   limit?: number;
   offset?: number;
@@ -566,6 +566,11 @@ function initSchema(database: Database.Database) {
       note TEXT,
       FOREIGN KEY (card_id) REFERENCES cards(card_id)
     );
+
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   migrateSchema(database);
@@ -756,6 +761,7 @@ export async function syncCardDatabase(): Promise<SyncResult> {
   rebuildAllSearchText(database);
 
   const total = getCardCount();
+  setPersistedSyncError(syncError);
   return { count: total, total, syncError };
 }
 
@@ -783,6 +789,34 @@ function buildSearchCondition(alias = ''): string {
   )`;
 }
 
+function toFilterList<T extends string | number>(
+  value: T | T[] | undefined | null,
+): T[] {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function addInFilterCondition(
+  conditions: string[],
+  params: Record<string, string | number>,
+  columnExpr: string,
+  values: string | number | Array<string | number> | undefined | null,
+  paramPrefix: string,
+): void {
+  const list = toFilterList(values);
+  if (list.length === 0) return;
+  if (list.length === 1) {
+    conditions.push(`${columnExpr} = @${paramPrefix}`);
+    params[paramPrefix] = list[0];
+    return;
+  }
+  const placeholders = list.map((_, i) => `@${paramPrefix}${i}`).join(', ');
+  conditions.push(`${columnExpr} IN (${placeholders})`);
+  list.forEach((v, i) => {
+    params[`${paramPrefix}${i}`] = v;
+  });
+}
+
 function buildCardFilterClause(filters: CardFilters): {
   where: string;
   params: Record<string, string | number>;
@@ -794,25 +828,20 @@ function buildCardFilterClause(filters: CardFilters): {
     conditions.push(buildSearchCondition());
     params.query = `%${filters.query.trim()}%`;
   }
-  if (filters.cardSet) {
-    conditions.push('card_set = @cardSet');
-    params.cardSet = filters.cardSet;
-  }
-  if (filters.classType) {
-    conditions.push('class = @classType');
-    params.classType = filters.classType;
-  }
-  if (filters.kind) {
-    conditions.push('kind = @kind');
-    params.kind = filters.kind;
-  }
+  addInFilterCondition(conditions, params, 'card_set', filters.cardSet, 'cardSet');
+  addInFilterCondition(conditions, params, 'class', filters.classType, 'classType');
+  addInFilterCondition(conditions, params, 'kind', filters.kind, 'kind');
   if (filters.rare !== undefined) {
-    conditions.push('COALESCE(rare, \'\') = @rare');
-    params.rare = filters.rare;
+    addInFilterCondition(
+      conditions,
+      params,
+      `COALESCE(rare, '')`,
+      filters.rare,
+      'rare',
+    );
   }
   if (filters.cost !== undefined && filters.cost !== null) {
-    conditions.push('cost = @cost');
-    params.cost = filters.cost;
+    addInFilterCondition(conditions, params, 'cost', filters.cost, 'cost');
   }
   if (filters.locale) {
     // 已统一为单卡，忽略印刷筛选
@@ -874,6 +903,17 @@ const RARE_SORT_ORDER = [
   '',
 ];
 
+function buildRareOrderExpr(columnRef: string): string {
+  const cases = RARE_SORT_ORDER.map(
+    (rare, i) => `WHEN '${rare.replace(/'/g, "''")}' THEN ${i}`,
+  ).join(' ');
+  return `CASE COALESCE(${columnRef}, '') ${cases} ELSE 999 END`;
+}
+
+function buildCardListOrderBy(variantColumn: string): string {
+  return `c.card_set, ${buildRareOrderExpr('c.rare')}, c.card_number, COALESCE(c.name_zh, c.name), ${variantColumn}`;
+}
+
 export function getCardRares(): string[] {
   const database = getDatabase();
   const rows = database
@@ -906,7 +946,7 @@ export function getInventory(filters: InventoryFilters = {}): InventoryRow[] {
        JOIN cards c ON c.card_id = i.card_id
        LEFT JOIN for_sale fs ON fs.card_id = i.card_id AND fs.variant = i.variant
        ${where}
-       ORDER BY c.card_set, COALESCE(c.name_zh, c.name), i.variant
+       ORDER BY ${buildCardListOrderBy('i.variant')}
        LIMIT @limit OFFSET @offset`,
     )
     .all({ ...params, limit, offset }) as InventoryRow[];
@@ -951,29 +991,39 @@ function buildCardListFilterConditions(
     conditions.push(buildSearchCondition('c'));
     params.query = `%${filters.query.trim()}%`;
   }
-  if (filters.cardSet) {
-    conditions.push('c.card_set = @cardSet');
-    params.cardSet = filters.cardSet;
-  }
-  if (filters.classType) {
-    conditions.push('c.class = @classType');
-    params.classType = filters.classType;
-  }
-  if (filters.kind) {
-    conditions.push('c.kind = @kind');
-    params.kind = filters.kind;
-  }
-  if (filters.variant) {
-    conditions.push(`${alias}.variant = @variant`);
-    params.variant = filters.variant;
-  }
+  addInFilterCondition(
+    conditions,
+    params,
+    'c.card_set',
+    filters.cardSet,
+    'cardSet',
+  );
+  addInFilterCondition(
+    conditions,
+    params,
+    'c.class',
+    filters.classType,
+    'classType',
+  );
+  addInFilterCondition(conditions, params, 'c.kind', filters.kind, 'kind');
+  addInFilterCondition(
+    conditions,
+    params,
+    `${alias}.variant`,
+    filters.variant,
+    'variant',
+  );
   if (filters.rare !== undefined) {
-    conditions.push(`COALESCE(c.rare, '') = @rare`);
-    params.rare = filters.rare;
+    addInFilterCondition(
+      conditions,
+      params,
+      `COALESCE(c.rare, '')`,
+      filters.rare,
+      'rare',
+    );
   }
   if (filters.cost !== undefined && filters.cost !== null) {
-    conditions.push('c.cost = @cost');
-    params.cost = filters.cost;
+    addInFilterCondition(conditions, params, 'c.cost', filters.cost, 'cost');
   }
 
   return { where: `WHERE ${conditions.join(' AND ')}`, params };
@@ -998,7 +1048,7 @@ function queryCardList(
        FROM ${table} ${alias}
        JOIN cards c ON c.card_id = ${alias}.card_id
        ${where}
-       ORDER BY c.card_set, COALESCE(c.name_zh, c.name), ${alias}.variant
+       ORDER BY ${buildCardListOrderBy(`${alias}.variant`)}
        LIMIT @limit OFFSET @offset`,
     )
     .all({ ...params, limit, offset }) as InventoryRow[];

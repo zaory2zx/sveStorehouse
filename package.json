@@ -6,13 +6,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && tsc -p tsconfig.electron.json",
+    "build": "tsc -b && vite build && tsc -p tsconfig.electron.json && node scripts/copy-onedrive-config.mjs",
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@azure/msal-node": "^5.4.0",
     "better-sqlite3": "^11.8.1",
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",

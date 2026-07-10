@@ -7,15 +7,16 @@ import {
   rareOptionValue,
   VARIANT_LABELS,
 } from '../lib/constants';
+import { MultiSelectFilter } from './MultiSelectFilter';
 
 export interface FilterValues {
   query: string;
-  cardSet: string;
-  classType: string;
-  kind: string;
-  variant: string;
-  rare: string;
-  cost: string;
+  cardSet: string[];
+  classType: string[];
+  kind: string[];
+  variant: string[];
+  rare: string[];
+  cost: string[];
 }
 
 interface FilterBarProps {
@@ -29,7 +30,6 @@ interface FilterBarProps {
 }
 
 const CLASS_OPTIONS = [
-  '',
   'Neutral',
   'Forestcraft',
   'Swordcraft',
@@ -40,7 +40,6 @@ const CLASS_OPTIONS = [
 ];
 
 const KIND_OPTIONS = [
-  '',
   'Leader',
   'Follower',
   'FollowerEvolved',
@@ -48,6 +47,26 @@ const KIND_OPTIONS = [
   'Amulet',
   'Token',
 ];
+
+const COST_OPTIONS = [
+  ...Array.from({ length: 11 }, (_, i) => ({
+    value: String(i),
+    label: String(i),
+  })),
+  { value: '-1', label: 'X' },
+];
+
+function hasActiveFilters(values: FilterValues): boolean {
+  if (values.query.trim()) return true;
+  return (
+    values.cardSet.length > 0 ||
+    values.classType.length > 0 ||
+    values.kind.length > 0 ||
+    values.variant.length > 0 ||
+    values.rare.length > 0 ||
+    values.cost.length > 0
+  );
+}
 
 export function FilterBar({
   values,
@@ -58,10 +77,10 @@ export function FilterBar({
   showRare = false,
   placeholder = '搜索中文/英文/日文名、卡号、效果…',
 }: FilterBarProps) {
-  const set = (key: keyof FilterValues, value: string) =>
+  const set = <K extends keyof FilterValues>(key: K, value: FilterValues[K]) =>
     onChange({ ...values, [key]: value });
 
-  const hasFilters = Object.values(values).some((v) => v !== '');
+  const hasFilters = hasActiveFilters(values);
 
   return (
     <div className="space-y-3">
@@ -79,104 +98,71 @@ export function FilterBar({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <select
-          className="select-field"
-          value={values.cardSet}
-          onChange={(e) => set('cardSet', e.target.value)}
-        >
-          <option value="">全部系列</option>
-          {cardSets.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <MultiSelectFilter
+          placeholder="全部系列"
+          options={cardSets.map((s) => ({ value: s, label: s }))}
+          values={values.cardSet}
+          onChange={(v) => set('cardSet', v)}
+          maxListHeight="20rem"
+        />
 
-        <select
-          className="select-field"
-          value={values.classType}
-          onChange={(e) => set('classType', e.target.value)}
-        >
-          <option value="">全部职业</option>
-          {CLASS_OPTIONS.filter(Boolean).map((c) => (
-            <option key={c} value={c}>
-              {CLASS_LABELS[c] ?? c}
-            </option>
-          ))}
-        </select>
+        <MultiSelectFilter
+          placeholder="全部职业"
+          options={CLASS_OPTIONS.map((c) => ({
+            value: c,
+            label: CLASS_LABELS[c] ?? c,
+          }))}
+          values={values.classType}
+          onChange={(v) => set('classType', v)}
+        />
 
-        <select
-          className="select-field"
-          value={values.kind}
-          onChange={(e) => set('kind', e.target.value)}
-        >
-          <option value="">全部类型</option>
-          {KIND_OPTIONS.filter(Boolean).map((k) => (
-            <option key={k} value={k}>
-              {KIND_LABELS[k] ?? k}
-            </option>
-          ))}
-        </select>
+        <MultiSelectFilter
+          placeholder="全部类型"
+          options={KIND_OPTIONS.map((k) => ({
+            value: k,
+            label: KIND_LABELS[k] ?? k,
+          }))}
+          values={values.kind}
+          onChange={(v) => set('kind', v)}
+        />
 
-        <select
-          className="select-field w-24"
-          value={values.cost}
-          onChange={(e) => set('cost', e.target.value)}
-        >
-          <option value="">费用</option>
-          {Array.from({ length: 11 }, (_, i) => (
-            <option key={i} value={String(i)}>
-              {i}
-            </option>
-          ))}
-          <option value="-1">X</option>
-        </select>
+        <MultiSelectFilter
+          placeholder="费用"
+          options={COST_OPTIONS}
+          values={values.cost}
+          onChange={(v) => set('cost', v)}
+          className="w-24"
+        />
 
         {showRare && (
-          <select
-            className="select-field"
-            value={values.rare}
-            onChange={(e) => set('rare', e.target.value)}
-          >
-            <option value="">全部稀有度</option>
-            {cardRares.map((r) => (
-              <option key={rareOptionValue(r)} value={rareOptionValue(r)}>
-                {displayRare(r)}
-              </option>
-            ))}
-          </select>
+          <MultiSelectFilter
+            placeholder="全部稀有度"
+            options={cardRares.map((r) => ({
+              value: rareOptionValue(r),
+              label: displayRare(r),
+            }))}
+            values={values.rare}
+            onChange={(v) => set('rare', v)}
+          />
         )}
 
         {showVariant && (
-          <select
-            className="select-field"
-            value={values.variant}
-            onChange={(e) => set('variant', e.target.value)}
-          >
-            <option value="">全部版本</option>
-            {(Object.keys(VARIANT_LABELS) as CardVariant[]).map((v) => (
-              <option key={v} value={v}>
-                {VARIANT_LABELS[v]}
-              </option>
-            ))}
-          </select>
+          <MultiSelectFilter
+            placeholder="全部版本"
+            options={(Object.keys(VARIANT_LABELS) as CardVariant[]).map((v) => ({
+              value: v,
+              label: VARIANT_LABELS[v],
+            }))}
+            values={values.variant}
+            onChange={(v) => set('variant', v)}
+          />
         )}
 
         {hasFilters && (
           <button
             type="button"
             className="btn-secondary flex items-center gap-1"
-            onClick={() =>
-              onChange({
-                query: '',
-                cardSet: '',
-                classType: '',
-                kind: '',
-                variant: '',
-                rare: '',
-                cost: '',
-              })
-            }
+            onClick={() => onChange({ ...emptyFilters })}
           >
             <X size={14} />
             清除
@@ -189,10 +175,10 @@ export function FilterBar({
 
 export const emptyFilters: FilterValues = {
   query: '',
-  cardSet: '',
-  classType: '',
-  kind: '',
-  variant: '',
-  rare: '',
-  cost: '',
+  cardSet: [],
+  classType: [],
+  kind: [],
+  variant: [],
+  rare: [],
+  cost: [],
 };

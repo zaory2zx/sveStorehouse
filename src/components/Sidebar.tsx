@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  HardDriveDownload,
   Package,
   PlusCircle,
   RefreshCw,
@@ -15,6 +16,7 @@ interface SidebarProps {
   cardCount: number;
   onSync: () => void;
   syncing: boolean;
+  onOpenDataSync: () => void;
 }
 
 const NAV: { id: Page; label: string; icon: typeof Package }[] = [
@@ -32,6 +34,7 @@ export function Sidebar({
   cardCount,
   onSync,
   syncing,
+  onOpenDataSync,
 }: SidebarProps) {
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-sve-border bg-gradient-to-b from-[#12151c] to-sve-surface">
@@ -75,12 +78,26 @@ export function Sidebar({
         </p>
         <button
           type="button"
-          className="btn-secondary flex w-full items-center justify-center gap-2 text-xs"
+          className="btn-secondary mb-2 flex w-full flex-col items-center justify-center gap-0.5 py-2 text-xs"
+          onClick={onOpenDataSync}
+        >
+          <span className="flex items-center gap-2">
+            <HardDriveDownload size={14} />
+            库存备份
+          </span>
+          <span className="text-[10px] text-sve-muted">导出 / OneDrive</span>
+        </button>
+        <button
+          type="button"
+          className="btn-secondary flex w-full flex-col items-center justify-center gap-0.5 py-2 text-xs"
           onClick={onSync}
           disabled={syncing}
         >
-          <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-          {syncing ? '同步中…' : '同步卡库'}
+          <span className="flex items-center gap-2">
+            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? '同步中…' : '同步卡库'}
+          </span>
+          <span className="text-[10px] text-sve-muted">更新卡牌数据库</span>
         </button>
       </div>
     </aside>

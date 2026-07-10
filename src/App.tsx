@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
+import { DataSyncModal } from './components/DataSyncModal';
 import { SyncWarningBanner } from './components/SyncWarningBanner';
 import { Page } from './lib/constants';
 import { AddCardPage } from './pages/AddCardPage';
@@ -23,6 +24,7 @@ export default function App() {
   const [initMessage, setInitMessage] = useState('正在初始化…');
   const [syncing, setSyncing] = useState(false);
   const [syncWarning, setSyncWarning] = useState(false);
+  const [dataSyncOpen, setDataSyncOpen] = useState(false);
 
   const refreshMeta = useCallback(async () => {
     const [count, sets, rares] = await Promise.all([
@@ -136,6 +138,13 @@ export default function App() {
         cardCount={cardCount}
         onSync={handleSync}
         syncing={syncing}
+        onOpenDataSync={() => setDataSyncOpen(true)}
+      />
+
+      <DataSyncModal
+        open={dataSyncOpen}
+        onClose={() => setDataSyncOpen(false)}
+        onChanged={bump}
       />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">

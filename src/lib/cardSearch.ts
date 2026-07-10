@@ -1,57 +1,6 @@
-import { FilterValues } from '../components/FilterBar';
-import { rareFilterToQuery } from './constants';
-
-export const CARD_SEARCH_PAGE_SIZE = 60;
-
-export function buildCardSearchFilters(
-  filters: FilterValues,
-  page: number,
-): {
-  query?: string;
-  cardSet?: string;
-  classType?: string;
-  kind?: string;
-  rare?: string;
-  cost?: number | null;
-  limit: number;
-  offset: number;
-} {
-  return {
-    query: filters.query || undefined,
-    cardSet: filters.cardSet || undefined,
-    classType: filters.classType || undefined,
-    kind: filters.kind || undefined,
-    rare: rareFilterToQuery(filters.rare),
-    cost:
-      filters.cost === ''
-        ? undefined
-        : filters.cost === '-1'
-          ? -1
-          : Number(filters.cost),
-    limit: CARD_SEARCH_PAGE_SIZE,
-    offset: (page - 1) * CARD_SEARCH_PAGE_SIZE,
-  };
-}
-
-export function buildCardCountFilters(filters: FilterValues): {
-  query?: string;
-  cardSet?: string;
-  classType?: string;
-  kind?: string;
-  rare?: string;
-  cost?: number | null;
-} {
-  return {
-    query: filters.query || undefined,
-    cardSet: filters.cardSet || undefined,
-    classType: filters.classType || undefined,
-    kind: filters.kind || undefined,
-    rare: rareFilterToQuery(filters.rare),
-    cost:
-      filters.cost === ''
-        ? undefined
-        : filters.cost === '-1'
-          ? -1
-          : Number(filters.cost),
-  };
-}
+export {
+  buildCardCountFilters,
+  buildCardSearchFilters,
+  buildListQueryFilters,
+  CARD_SEARCH_PAGE_SIZE,
+} from './filterQuery';

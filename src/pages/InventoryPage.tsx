@@ -12,8 +12,8 @@ import {
   KIND_LABELS,
   displayName,
   displayRare,
-  rareFilterToQuery,
 } from '../lib/constants';
+import { buildListQueryFilters } from '../lib/filterQuery';
 
 interface InventoryPageProps {
   cardSets: string[];
@@ -48,19 +48,7 @@ export function InventoryPage({
   const [error, setError] = useState('');
 
   const queryFilters = useMemo(
-    () => ({
-      query: filters.query || undefined,
-      cardSet: filters.cardSet || undefined,
-      classType: filters.classType || undefined,
-      kind: filters.kind || undefined,
-      rare: rareFilterToQuery(filters.rare),
-      cost:
-        filters.cost === ''
-          ? undefined
-          : filters.cost === '-1'
-            ? -1
-            : Number(filters.cost),
-    }),
+    () => buildListQueryFilters(filters),
     [filters],
   );
 
